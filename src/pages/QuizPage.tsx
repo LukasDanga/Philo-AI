@@ -278,7 +278,7 @@ export default function QuizPage() {
                   {currentQuestion.topic}
                 </span>
               </div>
-              <h3>{currentQuestion.question}</h3>
+              <h3 style={{ fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.4, marginBottom: '24px', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{currentQuestion.question}</h3>
               
               <div className="answer-options">
                 {currentQuestion.options.map(opt => (

@@ -1,5 +1,8 @@
-import { NavLink } from 'react-router-dom'
-import { Brain, ChatCircleDots, Books, Compass, User } from '@phosphor-icons/react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { Brain, ChatCircleDots, Books, Compass, User, SignOut } from '@phosphor-icons/react'
+import { useStreak } from '../hooks/useStreak'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 interface SidebarProps {
   isOpen: boolean;
@@ -7,6 +10,28 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
+  const streak = useStreak()
+  const navigate = useNavigate()
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+  
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    navigate('/')
+  }
+
+  const displayName = user?.user_metadata?.full_name || localStorage.getItem('profile_name') || "Bảo Khang"
+  const avatarUrl = user?.user_metadata?.avatar_url || localStorage.getItem('profile_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFEE99&color=333&size=40`
+
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
@@ -62,11 +87,18 @@ export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
       </nav>
       
       <div className="sidebar-user">
-        <img src="https://ui-avatars.com/api/?name=B%E1%BA%A3o+Khang&background=FFEE99&color=333&size=40" alt="User" />
+        <img src={avatarUrl} alt="User" />
         <div className="sidebar-user-info">
-          <strong>Bảo Khang</strong>
-          <small>Chuỗi 12 ngày 🔥</small>
+          <strong>{displayName}</strong>
+          <small>Chuỗi {streak} ngày 🔥</small>
         </div>
+        <button 
+          onClick={handleLogout}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', marginLeft: 'auto', padding: '8px', display: 'flex' }}
+          title="Đăng xuất"
+        >
+          <SignOut size={20} />
+        </button>
       </div>
     </aside>
   )

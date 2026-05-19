@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Scroll, YinYang, ShootingStar, Scales, Atom, Planet, BookOpen, CaretLeft, Clock, Quotes } from '@phosphor-icons/react'
+import { supabase } from '../lib/supabase'
 
 // Cấu trúc dữ liệu
 interface Section {
@@ -52,16 +53,39 @@ export default function LibraryPage() {
     const fetchLibraryData = async () => {
       setIsLoading(true)
       try {
-        // Trong tương lai, bạn chỉ cần thay đường link này bằng API của Supabase/Firebase!
-        // Ví dụ: const response = await fetch('https://your-project.supabase.co/rest/v1/library')
+        if (import.meta.env.VITE_SUPABASE_URL) {
+          // Lấy từ Supabase
+          const { data: cats, error: catError } = await supabase.from('categories').select('*')
+          const { data: booksArr, error: bookError } = await supabase.from('books').select('*')
+          
+          if (!catError && !bookError && cats && booksArr) {
+            // Chuyển đổi định dạng books table thành Object Record
+            const booksRecord: Record<string, Book[]> = {}
+            booksArr.forEach(b => {
+              if (!booksRecord[b.category_id]) booksRecord[b.category_id] = []
+              booksRecord[b.category_id].push({
+                ...b,
+                iconName: b.icon_name,
+                time: b.read_time
+              })
+            })
+            
+            setLibraryData({ 
+              categories: cats.map(c => ({...c, iconName: c.icon_name})), 
+              books: booksRecord 
+            })
+            return
+          }
+        }
+        
+        // Fallback: Nếu chưa có Supabase hoặc lỗi, lấy từ file nội bộ
         const response = await fetch('/data/library.json')
         const data = await response.json()
         setLibraryData(data)
       } catch (error) {
         console.error("Lỗi tải dữ liệu thư viện:", error)
       } finally {
-        // Delay một chút để bạn thấy hiệu ứng loading mượt mà
-        setTimeout(() => setIsLoading(false), 500)
+        setIsLoading(false)
       }
     }
 
@@ -214,7 +238,8 @@ export default function LibraryPage() {
               <div key={idx} style={{ marginBottom: '40px' }}>
                 {/* Highlighted Subheading */}
                 <h3 style={{ 
-                  fontSize: '1.1rem', 
+                  fontSize: '1.4rem', 
+                  fontWeight: 800,
                   color: 'var(--text-main)', 
                   marginBottom: '16px',
                   display: 'flex',

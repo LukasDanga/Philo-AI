@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Student, PaperPlaneRight, DotsThree } from '@phosphor-icons/react'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 interface Message {
   id: number;
@@ -8,11 +9,11 @@ interface Message {
   isThinking?: boolean;
 }
 
+const SYSTEM_PROMPT = `Bạn là một triết gia AI vô cùng uyên bác, thấu hiểu sâu sắc các trường phái triết học từ Đông sang Tây (Khắc kỷ, Hiện sinh, Phật giáo, Lão Trang, v.v.). Bạn luôn giữ thái độ điềm tĩnh, thông thái, và ngôn từ trau chuốt, nhẹ nhàng mang tính chữa lành. Khi trả lời, hãy đan xen những triết lý thực tiễn giúp ích cho cuộc sống hiện đại của người hỏi. Luôn xưng "tôi" và gọi người dùng là "bạn". Trả lời ngắn gọn, súc tích (dưới 200 chữ).`
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: 'Chào bạn! 👋 Tôi là triết gia AI của bạn. Hôm nay bạn muốn khám phá điều gì về thế giới và chính mình?', sender: 'ai' },
-    { id: 2, text: 'Stoicism giúp gì cho cuộc sống hiện đại?', sender: 'user' },
-    { id: 3, text: 'Chủ nghĩa Khắc kỷ (Stoicism) dạy chúng ta tập trung vào những gì ta có thể kiểm soát và buông bỏ những gì ta không thể. Điều này giúp giảm lo âu và mang lại bình yên nội tâm giữa thế giới đầy biến động. 🧘‍♂️', sender: 'ai' }
+    { id: 1, text: 'Chào bạn! 👋 Tôi là triết gia AI của bạn. Hôm nay bạn muốn khám phá điều gì về thế giới và chính mình?', sender: 'ai' }
   ])
   const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
@@ -26,24 +27,57 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages, isTyping])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim()) return
 
-    const newUserMsg: Message = { id: Date.now(), text: inputValue, sender: 'user' }
+    const userText = inputValue
+    const newUserMsg: Message = { id: Date.now(), text: userText, sender: 'user' }
+    
     setMessages(prev => [...prev, newUserMsg])
     setInputValue('')
     setIsTyping(true)
 
-    // Simulate AI thinking and responding
-    setTimeout(() => {
-      setIsTyping(false)
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+      if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+        throw new Error('Missing API Key')
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey)
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.5-flash',
+        systemInstruction: SYSTEM_PROMPT
+      })
+
+      // Lấy lịch sử chat (bỏ tin nhắn chào hỏi đầu tiên nếu cần)
+      const chat = model.startChat({
+        history: messages.filter(m => m.id !== 1).map(m => ({
+          role: m.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: m.text }]
+        }))
+      })
+
+      const result = await chat.sendMessage(userText)
+      const response = await result.response
+      const text = response.text()
+
       const newAiMsg: Message = { 
-        id: Date.now(), 
-        text: 'Đó là một câu hỏi triết học rất thú vị! Bạn có muốn đào sâu thêm về khía cạnh này không? 🤔', 
+        id: Date.now() + 1, 
+        text: text, 
         sender: 'ai' 
       }
       setMessages(prev => [...prev, newAiMsg])
-    }, 1500)
+    } catch (error) {
+      console.error(error)
+      const errorMsg: Message = { 
+        id: Date.now() + 1, 
+        text: 'Xin lỗi, tôi đang cần tĩnh tâm đôi chút (Chưa cấu hình API Key hoặc lỗi kết nối). Bạn hãy kiểm tra lại file .env nhé!', 
+        sender: 'ai' 
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   const handleChipClick = (text: string) => {

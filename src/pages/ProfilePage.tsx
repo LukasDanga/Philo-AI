@@ -1,18 +1,68 @@
-import { PencilSimple, Fire, ChatCenteredText, Target } from '@phosphor-icons/react'
+import { PencilSimple, Fire, ChatCenteredText, Target, Check } from '@phosphor-icons/react'
+import { useStreak } from '../hooks/useStreak'
+import { useState, useRef, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 export default function ProfilePage() {
+  const streak = useStreak()
+  
+  const [profile, setProfile] = useState({
+    name: localStorage.getItem('profile_name') || 'Bảo Khang',
+    bio: localStorage.getItem('profile_bio') || 'Người tìm kiếm chân lý trong thế giới hiện đại ✨',
+    avatar: localStorage.getItem('profile_avatar') || 'https://ui-avatars.com/api/?name=B%E1%BA%A3o+Khang&background=FFEE99&color=333&size=120'
+  })
+  const [isEditing, setIsEditing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (user) {
+        const localName = localStorage.getItem('profile_name')
+        const localBio = localStorage.getItem('profile_bio')
+        const localAvatar = localStorage.getItem('profile_avatar')
+
+        const defaultName = user.user_metadata?.full_name || 'Người dùng'
+        setProfile({
+          name: localName || defaultName,
+          bio: localBio || user.email || 'Người tìm kiếm chân lý trong thế giới hiện đại ✨',
+          avatar: localAvatar || user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultName)}&background=FFEE99&color=333&size=120`
+        })
+      }
+    })
+  }, [])
+
+  const handleSave = () => {
+    setIsEditing(false)
+    localStorage.setItem('profile_name', profile.name)
+    localStorage.setItem('profile_bio', profile.bio)
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64String = reader.result as string
+        setProfile(prev => ({ ...prev, avatar: base64String }))
+        localStorage.setItem('profile_avatar', base64String)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const stats = [
-    { id: 1, value: '🔥 12 ngày', label: 'Chuỗi học liên tục', type: 'fire', icon: Fire },
+    { id: 1, value: `🔥 ${streak} ngày`, label: 'Chuỗi học liên tục', type: 'fire', icon: Fire },
     { id: 2, value: '87', label: 'Cuộc trò chuyện', type: 'chat', icon: ChatCenteredText },
     { id: 3, value: '89%', label: 'Điểm quiz trung bình', type: 'quiz', icon: Target },
   ]
 
   const philosophers = [
-    { id: 1, name: 'Socrates', img: 'https://ui-avatars.com/api/?name=SO&background=A5D6FF&color=003366&bold=true&size=64' },
-    { id: 2, name: 'Nietzsche', img: 'https://ui-avatars.com/api/?name=NZ&background=FFB8B8&color=8B0000&bold=true&size=64' },
-    { id: 3, name: 'Lão Tử', img: 'https://ui-avatars.com/api/?name=LT&background=98E9C9&color=1A533B&bold=true&size=64' },
-    { id: 4, name: 'Plato', img: 'https://ui-avatars.com/api/?name=PL&background=D5C7FF&color=4A148C&bold=true&size=64' },
-    { id: 5, name: 'Đức Phật', img: 'https://ui-avatars.com/api/?name=DP&background=FFEE99&color=7A5C00&bold=true&size=64' },
+    { id: 1, name: 'Socrates', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Socrates_Louvre.jpg/220px-Socrates_Louvre.jpg' },
+    { id: 2, name: 'Nietzsche', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Nietzsche187a.jpg/220px-Nietzsche187a.jpg' },
+    { id: 3, name: 'Lão Tử', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Laozi.jpg/220px-Laozi.jpg' },
+    { id: 4, name: 'Plato', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Plato_Silanion_Musei_Capitolini_MC1377.jpg/220px-Plato_Silanion_Musei_Capitolini_MC1377.jpg' },
+    { id: 5, name: 'Đức Phật', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Buddha_in_Sarnath_Museum_%28Dhammajak_Mutra%29.jpg/220px-Buddha_in_Sarnath_Museum_%28Dhammajak_Mutra%29.jpg' },
   ]
 
   return (
@@ -21,14 +71,47 @@ export default function ProfilePage() {
         <div className="profile-card">
           <div className="profile-banner"></div>
           <div className="profile-info">
-            <div className="avatar-large">
-              <img src="https://ui-avatars.com/api/?name=B%E1%BA%A3o+Khang&background=FFEE99&color=333&size=120" alt="Bảo Khang" />
-              <button className="edit-avatar">
-                <PencilSimple />
-              </button>
+            <div className="avatar-large" onClick={() => isEditing && fileInputRef.current?.click()} style={{ cursor: isEditing ? 'pointer' : 'default', position: 'relative', width: '120px', height: '120px', margin: '0 auto 12px' }}>
+              <img src={profile.avatar} alt={profile.name} style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '50%', border: '4px solid var(--white)', boxShadow: 'var(--shadow-md)' }} />
+              {isEditing && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.9rem' }}>
+                  Đổi ảnh
+                </div>
+              )}
+              <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" style={{ display: 'none' }} />
+              
+              {!isEditing && (
+                <button className="edit-avatar" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}>
+                  <PencilSimple />
+                </button>
+              )}
             </div>
-            <h2>Bảo Khang</h2>
-            <p className="bio">Người tìm kiếm chân lý trong thế giới hiện đại ✨</p>
+            
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+                <input 
+                  value={profile.name} 
+                  onChange={e => setProfile({...profile, name: e.target.value})} 
+                  style={{ fontSize: '1.5rem', fontWeight: 800, textAlign: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 12px', width: '250px' }}
+                />
+                <input 
+                  value={profile.bio} 
+                  onChange={e => setProfile({...profile, bio: e.target.value})} 
+                  style={{ fontSize: '0.9rem', textAlign: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 12px', width: '350px', color: 'var(--text-secondary)' }}
+                />
+                <button 
+                  onClick={handleSave}
+                  style={{ background: 'var(--mint-green)', border: 'none', padding: '6px 16px', borderRadius: '20px', color: 'var(--text-main)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', marginTop: '8px' }}
+                >
+                  <Check weight="bold" /> Lưu hồ sơ
+                </button>
+              </div>
+            ) : (
+              <>
+                <h2>{profile.name}</h2>
+                <p className="bio">{profile.bio}</p>
+              </>
+            )}
           </div>
         </div>
         

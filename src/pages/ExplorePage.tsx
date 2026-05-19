@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Clock, Quotes, YoutubeLogo, Article } from '@phosphor-icons/react'
+import { Clock, Quotes, YoutubeLogo, Article, Sparkle, ArrowRight } from '@phosphor-icons/react'
+import { useNavigate } from 'react-router-dom'
 
 interface Quote {
   content: string;
@@ -9,6 +10,7 @@ interface Quote {
 export default function ExplorePage() {
   const [quoteOfDay, setQuoteOfDay] = useState<Quote | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = useState(true)
+  const navigate = useNavigate()
 
   // Articles/Videos fallback (mock data)
   const contentFeed = [
@@ -118,6 +120,36 @@ export default function ExplorePage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+
+        {/* Banner Bài Test Tính Cách */}
+        <div 
+          onClick={() => navigate('/personality-test')}
+          style={{
+            background: 'linear-gradient(135deg, var(--white), var(--soft-yellow))',
+            borderRadius: 'var(--radius-lg)',
+            padding: '32px 40px',
+            marginBottom: '40px',
+            boxShadow: 'var(--shadow-md)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            transition: 'transform 0.2s',
+            border: '2px solid var(--white)'
+          }}
+          className="book-card-hover"
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A5C00', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <Sparkle weight="fill" /> Bài trắc nghiệm mới
+            </div>
+            <h2 style={{ fontSize: '1.6rem', color: 'var(--text-main)', marginBottom: '8px' }}>Bạn mang tư tưởng của Triết gia nào?</h2>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '1.05rem' }}>Khám phá trường phái triết học ẩn sâu bên trong tâm hồn bạn qua 5 câu hỏi tình huống.</p>
+          </div>
+          <div style={{ background: 'var(--white)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)', color: '#7A5C00' }}>
+            <ArrowRight size={24} weight="bold" />
           </div>
         </div>
 

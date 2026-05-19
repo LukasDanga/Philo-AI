@@ -1,8 +1,24 @@
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, Lightbulb, Columns, Tree, Brain, Sparkle, GoogleLogo, EnvelopeSimple } from '@phosphor-icons/react'
+import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + '/explore'
+        }
+      })
+      if (error) throw error
+    } catch (err: any) {
+      console.error('Lỗi đăng nhập Google:', err)
+      alert('Lỗi đăng nhập: ' + (err.message || 'Vui lòng kiểm tra lại cấu hình Supabase.'))
+    }
+  }
 
   return (
     <div className="login-page active">
@@ -29,13 +45,13 @@ export default function LoginPage() {
           <p className="subtitle">Học triết học · Khám phá bản thân · Phát triển tư duy</p>
           
           <div className="login-buttons">
-            <button className="btn btn-primary" onClick={() => navigate('/chat')}>
+            <button className="btn btn-primary" onClick={handleGoogleLogin}>
               <GoogleLogo weight="fill" />
               Tiếp tục với Google
             </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/chat')}>
+            <button className="btn btn-secondary" onClick={() => navigate('/explore')}>
               <EnvelopeSimple />
-              Đăng nhập bằng email
+              Chạy ẩn danh (Khách)
             </button>
           </div>
           
