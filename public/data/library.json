@@ -1,0 +1,148 @@
+{
+  "categories": [
+    { "id": "ancient", "title": "Triết học Cổ đại", "desc": "Socrates, Plato, Aristotle", "iconName": "Scroll", "color": "var(--pastel-blue)" },
+    { "id": "eastern", "title": "Triết học Đông Phương", "desc": "Lão Tử, Khổng Tử, Phật giáo", "iconName": "YinYang", "color": "var(--mint-green)" },
+    { "id": "existential", "title": "Chủ nghĩa Hiện sinh", "desc": "Sartre, Camus, Kierkegaard", "iconName": "ShootingStar", "color": "var(--soft-yellow)" },
+    { "id": "ethics", "title": "Đạo đức học", "desc": "Kant, Mill, Rawls", "iconName": "Scales", "color": "var(--light-coral)" },
+    { "id": "modern", "title": "Triết học Hiện đại", "desc": "Descartes, Hume, Nietzsche", "iconName": "Atom", "color": "var(--lavender)" },
+    { "id": "political", "title": "Triết học Chính trị", "desc": "Marx, Locke, Rousseau", "iconName": "Planet", "color": "var(--pastel-blue)" }
+  ],
+  "books": {
+    "ancient": [
+      { 
+        "id": 101, "title": "Cộng hòa (The Republic)", "author": "Plato", "type": "Sách gốc", "time": "12 giờ đọc", "summary": "Tác phẩm nền tảng của triết học phương Tây, thảo luận về công lý, trật tự và nhà nước lý tưởng.",
+        "sections": [
+          {
+            "heading": "Câu hỏi về Công lý",
+            "content": [
+              "Cuộc đối thoại bắt đầu với câu hỏi tưởng chừng đơn giản: Công lý là gì? Socrates tranh luận với nhiều nhân vật khác nhau để bác bỏ định nghĩa công lý chỉ đơn thuần là \"nợ gì trả nấy\" hay \"lợi ích của kẻ mạnh\".",
+              "Ông cho rằng công lý thực sự nằm ở sự hài hòa — cả trong cấu trúc của một nhà nước lẫn trong tâm hồn của mỗi cá nhân."
+            ],
+            "quote": "Nhà nước lớn lên từ đâu? Nó sinh ra từ nhu cầu của nhân loại; không ai tự mình đáp ứng đủ mọi nhu cầu."
+          },
+          {
+            "heading": "Ngụ ngôn Cái hang",
+            "content": [
+              "Đây có lẽ là phần nổi tiếng nhất của cuốn sách. Plato tưởng tượng những người bị xích trong một hang động từ lúc mới sinh, chỉ nhìn thấy bóng của sự vật in trên vách đá do ngọn lửa phía sau hắt lên.",
+              "Với họ, những cái bóng đó là thực tại duy nhất. Triết gia là người đã phá được gông cùm, thoát ra ngoài ánh sáng mặt trời để nhìn thấy vạn vật thật sự (Thế giới Ý niệm), và sau đó có trách nhiệm quay lại hang để khai sáng cho những người khác."
+            ]
+          },
+          {
+            "heading": "Vua Triết Gia",
+            "content": [
+              "Plato lập luận rằng xã hội hoàn hảo phải được cai trị bởi những Vua Triết Gia (Philosopher Kings) — những người yêu trí tuệ, không ham muốn quyền lực cá nhân, và đã đạt thấu hiểu về \"Đích Thiện\" (The Form of the Good)."
+            ]
+          }
+        ]
+      },
+      { 
+        "id": 102, "title": "Đạo đức học Nicomachean", "author": "Aristotle", "type": "Sách gốc", "time": "10 giờ đọc", "summary": "Nghiên cứu về thế nào là một cuộc sống tốt đẹp và hạnh phúc (Eudaimonia) của con người.", 
+        "sections": [
+          { "heading": "Hạnh phúc đích thực", "content": ["Aristotle cho rằng mục tiêu tối cao của con người là Eudaimonia (sự phát triển rực rỡ hay hạnh phúc).", "Nó không phải là khoái lạc nhất thời, mà là hoạt động của tâm hồn theo đức hạnh trong suốt cuộc đời."] }
+        ] 
+      },
+      { 
+        "id": 103, "title": "Lời biện bạch của Socrates", "author": "Plato", "type": "Bài diễn văn", "time": "2 giờ đọc", "summary": "Ghi chép lại lời tự bào chữa của Socrates tại phiên tòa kết án tử hình ông.", 
+        "sections": [
+          { "heading": "Sự thông thái của sự vô tri", "content": ["Socrates khẳng định ông chỉ thông thái ở chỗ ông biết rằng mình không biết gì cả.", "Ông từ chối việc từ bỏ triết học để đổi lấy mạng sống."], "quote": "Một cuộc đời không được suy xét thì không đáng sống." }
+        ] 
+      }
+    ],
+    "eastern": [
+      { 
+        "id": 201, "title": "Đạo Đức Kinh", "author": "Lão Tử", "type": "Kinh điển", "time": "3 giờ đọc", "summary": "Văn bản cốt lõi của Đạo giáo, hướng dẫn con người sống thuận theo \"Đạo\" (tự nhiên).",
+        "sections": [
+          {
+            "heading": "Bản thể của Đạo",
+            "content": [
+              "Đạo là nguyên lý tối cao, vô hình, vô danh, sinh ra muôn loài. Đạo không thể diễn tả bằng lời; \"Đạo mà có thể nói ra được, không phải là Đạo thường hằng\".",
+              "Mọi sự vật sinh ra từ Đạo, lớn lên nhờ Đức, hình thành nhờ vật chất, hoàn thiện nhờ hoàn cảnh."
+            ],
+            "quote": "Đạo khả đạo phi thường đạo. Danh khả danh phi thường danh."
+          },
+          {
+            "heading": "Triết lý Vô vi",
+            "content": [
+              "Vô vi không phải là ngồi im không làm gì, mà là làm một cách tự nhiên, không gượng ép, không chống lại quy luật của vũ trụ. Giống như nước, mềm mỏng nhưng có thể xuyên thủng đá cứng.",
+              "Người trị quốc giỏi nhất là người cai trị mà dân không nhận ra sự can thiệp của người đó."
+            ]
+          }
+        ]
+      },
+      { 
+        "id": 202, "title": "Luận Ngữ", "author": "Khổng Tử", "type": "Kinh điển", "time": "5 giờ đọc", "summary": "Tập hợp các lời dạy của Khổng Tử về đạo đức, tu thân, tề gia, trị quốc.", 
+        "sections": [
+          { "heading": "Nhân và Lễ", "content": ["Nhân là lòng yêu thương con người, Lễ là hệ thống quy tắc ứng xử xã hội.", "Sự tu dưỡng bản thân là nền tảng của một xã hội hài hòa."], "quote": "Kỷ sở bất dục, vật thi ư nhân (Điều mình không muốn, đừng làm cho người)." }
+        ] 
+      },
+      { 
+        "id": 203, "title": "Nam Hoa Kinh", "author": "Trang Tử", "type": "Kinh điển", "time": "6 giờ đọc", "summary": "Tuyệt tác của Đạo giáo với những ngụ ngôn sâu sắc về tự do tuyệt đối và sự phù phiếm của đời người.", 
+        "sections": [
+          { "heading": "Tiêu Dao Du", "content": ["Khái niệm tự do tuyệt đối, không bị ràng buộc bởi bất kỳ tiêu chuẩn thế gian nào.", "Chấp nhận sự tương đối của mọi khái niệm (tốt/xấu, lớn/nhỏ)."] }
+        ] 
+      }
+    ],
+    "existential": [
+      { 
+        "id": 301, "title": "Buồn Nôn (La Nausée)", "author": "Jean-Paul Sartre", "type": "Tiểu thuyết triết học", "time": "8 giờ đọc", "summary": "Câu chuyện về Roquentin và sự thức tỉnh của anh trước sự phi lý của tồn tại.", 
+        "sections": [
+          { "heading": "Sự phi lý", "content": ["Mọi sự vật tồn tại một cách vô cớ, dư thừa và hoàn toàn ngẫu nhiên.", "Nhận thức sâu sắc về điều này gây ra cảm giác 'buồn nôn' sinh thể."] }
+        ] 
+      },
+      { 
+        "id": 302, "title": "Kẻ Xa Lạ (L'Étranger)", "author": "Albert Camus", "type": "Tiểu thuyết triết học", "time": "4 giờ đọc", "summary": "Tác phẩm kinh điển về chủ nghĩa phi lý thông qua cuộc đời vô cảm của Meursault.", 
+        "sections": [
+          { "heading": "Kẻ ngoài cuộc", "content": ["Meursault bị xã hội kết án không hẳn vì tội giết người, mà vì anh không khóc trong đám tang của mẹ.", "Anh từ chối chơi trò chơi giả tạo của xã hội."] }
+        ] 
+      },
+      { 
+        "id": 303, "title": "Sợ hãi và Run rẩy", "author": "Søren Kierkegaard", "type": "Tiểu luận", "time": "5 giờ đọc", "summary": "Phân tích về câu chuyện Abraham hiến tế Isaac để khám phá bản chất của đức tin và đạo đức.", 
+        "sections": [
+          { "heading": "Bước nhảy của Đức tin", "content": ["Đức tin chân chính đòi hỏi sự vượt lên trên các tiêu chuẩn đạo đức phổ quát.", "Cá nhân đứng đơn độc đối diện với Tuyệt đối."] }
+        ] 
+      }
+    ],
+    "ethics": [
+      { 
+        "id": 401, "title": "Phê phán lý tính thực hành", "author": "Immanuel Kant", "type": "Sách gốc", "time": "11 giờ đọc", "summary": "Trình bày triết học đạo đức của Kant và khái niệm \"Mệnh lệnh tuyệt đối\".", 
+        "sections": [
+          { "heading": "Mệnh lệnh Tuyệt đối", "content": ["Hãy hành động sao cho phương châm hành động của bạn có thể trở thành quy luật phổ quát cho mọi người.", "Con người phải được đối xử như một mục đích tự thân, không bao giờ chỉ là phương tiện."] }
+        ] 
+      },
+      { 
+        "id": 402, "title": "Thuyết Vị lợi", "author": "John Stuart Mill", "type": "Tiểu luận", "time": "3 giờ đọc", "summary": "Bảo vệ và hoàn thiện học thuyết cho rằng hành động đúng là mang lại nhiều hạnh phúc nhất.", 
+        "sections": [
+          { "heading": "Nguyên lý Hạnh phúc", "content": ["Hành động là đúng theo tỷ lệ chúng thúc đẩy hạnh phúc, là sai theo tỷ lệ chúng tạo ra sự đau khổ.", "Mill phân biệt giữa khoái lạc cao cấp (tinh thần) và khoái lạc thấp kém (thể xác)."] }
+        ] 
+      }
+    ],
+    "modern": [
+      { 
+        "id": 501, "title": "Phương pháp luận", "author": "René Descartes", "type": "Sách gốc", "time": "4 giờ đọc", "summary": "Tác phẩm đưa ra câu nói \"Tôi tư duy, nên tôi tồn tại\" và phương pháp hoài nghi khoa học.", 
+        "sections": [
+          { "heading": "Hoài nghi Phương pháp luận", "content": ["Nghi ngờ mọi thứ có thể bị nghi ngờ để tìm ra một chân lý tuyệt đối không thể lay chuyển.", "Chân lý đó chính là thực tại của người đang nghi ngờ (đang tư duy)."], "quote": "Cogito, ergo sum." }
+        ] 
+      },
+      { 
+        "id": 502, "title": "Zarathustra đã nói như thế", "author": "Friedrich Nietzsche", "type": "Tiểu thuyết triết học", "time": "9 giờ đọc", "summary": "Trình bày tư tưởng về \"Siêu nhân\" và sự vượt lên trên đạo đức truyền thống.", 
+        "sections": [
+          { "heading": "Siêu nhân (Übermensch)", "content": ["Siêu nhân là mục tiêu tiến hóa của nhân loại, người tự tạo ra ý nghĩa và giá trị cho riêng mình sau cái chết của Thượng đế.", "Yêu định mệnh (Amor Fati) và chấp nhận sự luân hồi vĩnh cửu."] }
+        ] 
+      }
+    ],
+    "political": [
+      { 
+        "id": 601, "title": "Khảo luận thứ hai về Chính quyền", "author": "John Locke", "type": "Sách gốc", "time": "6 giờ đọc", "summary": "Nền tảng của chủ nghĩa tự do hiện đại, lý thuyết về quyền tự nhiên và khế ước xã hội.", 
+        "sections": [
+          { "heading": "Quyền tự nhiên", "content": ["Mọi con người sinh ra đều có quyền tự nhiên đối với sinh mạng, tự do và tài sản.", "Mục đích duy nhất của chính quyền là bảo vệ các quyền này."] }
+        ] 
+      },
+      { 
+        "id": 602, "title": "Bàn về Khế ước Xã hội", "author": "Jean-Jacques Rousseau", "type": "Sách gốc", "time": "5 giờ đọc", "summary": "Khám phá ý tưởng về \"Ý chí chung\" và quyền lực tối cao của nhân dân.", 
+        "sections": [
+          { "heading": "Ý chí Chung", "content": ["Sự phục tùng ý chí chung không làm mất đi tự do, mà ngược lại, đó là tự do đích thực vì cá nhân đang tuân theo luật lệ do chính mình tham gia lập ra."], "quote": "Con người sinh ra tự do, nhưng khắp nơi họ đều mang xiềng xích." }
+        ] 
+      }
+    ]
+  }
+}
