@@ -11,13 +11,18 @@ export default function ProfilePage() {
     bio: localStorage.getItem('profile_bio') || 'Người tìm kiếm chân lý trong thế giới hiện đại ✨',
     avatar: localStorage.getItem('profile_avatar') || 'https://ui-avatars.com/api/?name=B%E1%BA%A3o+Khang&background=FFEE99&color=333&size=120'
   })
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (!supabase) {
+      return
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       const user = session?.user
       if (user) {
+        setUserEmail(user.email || null)
         const localName = localStorage.getItem('profile_name')
         const localBio = localStorage.getItem('profile_bio')
         const localAvatar = localStorage.getItem('profile_avatar')
@@ -36,6 +41,7 @@ export default function ProfilePage() {
     setIsEditing(false)
     localStorage.setItem('profile_name', profile.name)
     localStorage.setItem('profile_bio', profile.bio)
+    window.dispatchEvent(new CustomEvent('profile:updated', { detail: { name: profile.name, avatar: profile.avatar } }))
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,13 +98,18 @@ export default function ProfilePage() {
                 <input 
                   value={profile.name} 
                   onChange={e => setProfile({...profile, name: e.target.value})} 
+                  placeholder="Tên của bạn"
                   style={{ fontSize: '1.5rem', fontWeight: 800, textAlign: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 12px', width: '250px' }}
                 />
                 <input 
                   value={profile.bio} 
                   onChange={e => setProfile({...profile, bio: e.target.value})} 
+                  placeholder="Tiểu sử của bạn"
                   style={{ fontSize: '0.9rem', textAlign: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 12px', width: '350px', color: 'var(--text-secondary)' }}
                 />
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  Email: <strong>{userEmail || 'N/A'}</strong> (không thể thay đổi)
+                </div>
                 <button 
                   onClick={handleSave}
                   style={{ background: 'var(--mint-green)', border: 'none', padding: '6px 16px', borderRadius: '20px', color: 'var(--text-main)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', marginTop: '8px' }}
@@ -110,6 +121,9 @@ export default function ProfilePage() {
               <>
                 <h2>{profile.name}</h2>
                 <p className="bio">{profile.bio}</p>
+                {userEmail && (
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>📧 {userEmail}</p>
+                )}
               </>
             )}
           </div>

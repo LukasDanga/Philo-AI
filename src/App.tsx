@@ -14,6 +14,7 @@ function App() {
       <Route path="/" element={<LoginPage />} />
       <Route element={<AppShell />}>
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/explore" element={<ExplorePage />} />

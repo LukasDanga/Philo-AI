@@ -50,13 +50,13 @@ export default function LibraryPage() {
 
   // GỌI API (GIẢ LẬP) TỪ DATABASE
   useEffect(() => {
-    const fetchLibraryData = async () => {
-      setIsLoading(true)
-      try {
-        if (import.meta.env.VITE_SUPABASE_URL) {
-          // Lấy từ Supabase
-          const { data: cats, error: catError } = await supabase.from('categories').select('*')
-          const { data: booksArr, error: bookError } = await supabase.from('books').select('*')
+      const fetchLibraryData = async () => {
+        setIsLoading(true)
+        try {
+          if (supabase) {
+            // Lấy từ Supabase
+            const { data: cats, error: catError } = await supabase.from('categories').select('*')
+            const { data: booksArr, error: bookError } = await supabase.from('books').select('*')
           
           if (!catError && !bookError && cats && booksArr) {
             // Chuyển đổi định dạng books table thành Object Record

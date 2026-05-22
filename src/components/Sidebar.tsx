@@ -9,12 +9,28 @@ interface SidebarProps {
   closeSidebar: () => void;
 }
 
+interface ChatSession {
+  id: string;
+  title: string | null;
+  created_at: string;
+}
+
+const SESSION_PAGE_SIZE = 5
+
 export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
   const streak = useStreak()
   const navigate = useNavigate()
   const [user, setUser] = useState<any>(null)
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false)
+  const [hasMoreSessions, setHasMoreSessions] = useState(false)
+  const [sessionsCursor, setSessionsCursor] = useState<string | null>(null)
+  const [profileUpdateTrigger, setProfileUpdateTrigger] = useState(0)
 
   useEffect(() => {
+    if (!supabase) {
+      return
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
     })
@@ -23,14 +39,115 @@ export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
     })
     return () => subscription.unsubscribe()
   }, [])
-  
+
+  const loadSessions = async (reset = false) => {
+    if (!supabase || !user?.id) {
+      return
+    }
+    setIsLoadingSessions(true)
+    const query = supabase
+      .from('chat_sessions')
+      .select('id,title,created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(SESSION_PAGE_SIZE)
+
+    if (!reset && sessionsCursor) {
+      query.lt('created_at', sessionsCursor)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.error('Lỗi tải lịch sử chat:', error)
+      setIsLoadingSessions(false)
+      return
+    }
+
+    const nextSessions = data ?? []
+    setSessions(prev => (reset ? nextSessions : [...prev, ...nextSessions]))
+    setHasMoreSessions(nextSessions.length === SESSION_PAGE_SIZE)
+    if (reset) {
+      setSessionsCursor(nextSessions.length ? nextSessions[nextSessions.length - 1].created_at : null)
+    } else if (nextSessions.length) {
+      setSessionsCursor(nextSessions[nextSessions.length - 1].created_at)
+    }
+    setIsLoadingSessions(false)
+  }
+
+  useEffect(() => {
+    if (user?.id) {
+      setSessionsCursor(null)
+      loadSessions(true)
+    } else {
+      setSessions([])
+      setHasMoreSessions(false)
+      setSessionsCursor(null)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (user?.id) {
+        setSessionsCursor(null)
+        loadSessions(true)
+      }
+    }
+    const handleProfileUpdate = () => {
+      // Force re-render by incrementing trigger counter
+      setProfileUpdateTrigger(prev => prev + 1)
+    }
+    window.addEventListener('chat:sessions-updated', handleRefresh)
+    window.addEventListener('profile:updated', handleProfileUpdate)
+    return () => {
+      window.removeEventListener('chat:sessions-updated', handleRefresh)
+      window.removeEventListener('profile:updated', handleProfileUpdate)
+    }
+  }, [user?.id])
+   
   const handleLogout = async () => {
+    if (!supabase) {
+      alert('Chưa cấu hình Supabase. Vui lòng kiểm tra file .env và khởi động lại.')
+      return
+    }
     await supabase.auth.signOut()
     navigate('/')
   }
 
-  const displayName = user?.user_metadata?.full_name || localStorage.getItem('profile_name') || "Bảo Khang"
-  const avatarUrl = user?.user_metadata?.avatar_url || localStorage.getItem('profile_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFEE99&color=333&size=40`
+  const handleNewChat = async () => {
+    if (!supabase || !user?.id) {
+      alert('Bạn cần đăng nhập để tạo cuộc trò chuyện mới.')
+      return
+    }
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .insert({
+        user_id: user.id,
+        title: 'Cuộc trò chuyện mới'
+      })
+      .select('id')
+      .single()
+
+    if (error || !data) {
+      console.error('Lỗi tạo cuộc trò chuyện:', error)
+      alert('Không thể tạo cuộc trò chuyện mới. Vui lòng thử lại.')
+      return
+    }
+
+    navigate(`/chat/${data.id}`)
+    closeSidebar()
+    window.dispatchEvent(new CustomEvent('chat:sessions-updated'))
+  }
+
+  const handleLoadMore = () => {
+    if (!isLoadingSessions && hasMoreSessions) {
+      loadSessions(false)
+    }
+  }
+
+  const displayName = localStorage.getItem('profile_name') || user?.user_metadata?.full_name || "Bảo Khang"
+  const avatarUrl = localStorage.getItem('profile_avatar') || user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFEE99&color=333&size=40`
+  // Use profileUpdateTrigger to ensure re-render when profile changes
+  const userDisplayData = { displayName, avatarUrl, trigger: profileUpdateTrigger }
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -84,6 +201,35 @@ export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
             </>
           )}
         </NavLink>
+
+        <div className="sidebar-history">
+          <div className="sidebar-history-header">
+            <span>Lịch sử trò chuyện</span>
+            <button className="sidebar-new-chat" onClick={handleNewChat}>
+              + Mới
+            </button>
+          </div>
+          <div className="sidebar-history-list">
+            {sessions.length === 0 && !isLoadingSessions && (
+              <div className="sidebar-history-empty">Chưa có cuộc trò chuyện nào.</div>
+            )}
+            {sessions.map(session => (
+              <NavLink
+                key={session.id}
+                to={`/chat/${session.id}`}
+                className={({ isActive }) => `sidebar-history-link ${isActive ? 'active' : ''}`}
+                onClick={closeSidebar}
+              >
+                {session.title || 'Cuộc trò chuyện mới'}
+              </NavLink>
+            ))}
+          </div>
+          {hasMoreSessions && (
+            <button className="sidebar-load-more" onClick={handleLoadMore} disabled={isLoadingSessions}>
+              {isLoadingSessions ? 'Đang tải...' : 'Tải thêm'}
+            </button>
+          )}
+        </div>
       </nav>
       
       <div className="sidebar-user">

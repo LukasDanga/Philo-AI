@@ -6,6 +6,10 @@ export default function LoginPage() {
   const navigate = useNavigate()
 
   const handleGoogleLogin = async () => {
+    if (!supabase) {
+      alert('Chưa cấu hình Supabase. Vui lòng kiểm tra file .env và khởi động lại.')
+      return
+    }
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
