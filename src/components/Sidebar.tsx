@@ -147,7 +147,6 @@ export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
   const displayName = localStorage.getItem('profile_name') || user?.user_metadata?.full_name || "Bảo Khang"
   const avatarUrl = localStorage.getItem('profile_avatar') || user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FFEE99&color=333&size=40`
   // Use profileUpdateTrigger to ensure re-render when profile changes
-  const userDisplayData = { displayName, avatarUrl, trigger: profileUpdateTrigger }
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -232,7 +231,7 @@ export default function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
         </div>
       </nav>
       
-      <div className="sidebar-user">
+      <div className="sidebar-user" key={profileUpdateTrigger}>
         <img src={avatarUrl} alt="User" />
         <div className="sidebar-user-info">
           <strong>{displayName}</strong>

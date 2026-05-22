@@ -1,9 +1,36 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, ArrowRight, ArrowCounterClockwise } from '@phosphor-icons/react'
-import { fetchTopics, fetchQuestions, createQuizSession, recordAnswer, completeQuizSession, getTopicStats, type QuizQuestion } from '../lib/quiz'
+import { 
+  CheckCircle, 
+  XCircle, 
+  ArrowRight, 
+  ArrowCounterClockwise, 
+  BookOpen, 
+  Sparkle, 
+  GraduationCap, 
+  Clock, 
+  Calendar,
+  Medal,
+  CaretRight,
+  ListNumbers,
+  Target
+} from '@phosphor-icons/react'
+import { 
+  fetchTopics, 
+  fetchQuestions, 
+  createQuizSession, 
+  recordAnswer, 
+  completeQuizSession, 
+  getTopicProgress, 
+  fetchQuizHistory, 
+  fetchSessionResponses,
+  type QuizQuestion, 
+  type QuizSession, 
+  type QuizResponse,
+  type TopicProgress
+} from '../lib/quiz'
 import { supabase } from '../lib/supabase'
 
-type Screen = 'topic-selection' | 'question-count' | 'quiz' | 'results'
+type Screen = 'topic-selection' | 'question-count' | 'quiz' | 'results' | 'review-answers'
 
 const topicIcons: Record<string, string> = {
   'Tất cả': '🌍',
@@ -11,113 +38,207 @@ const topicIcons: Record<string, string> = {
   'Đông Phương': '☯️',
   'Hiện sinh': '🌀',
   'Đạo đức học': '⚖️',
-  'Triết học Hiện đại': '💡'
+  'Triết học Hiện đại': '💡',
+  'Chủ nghĩa Marx': '☭'
 }
 
-// Mock Data: 10 câu hỏi
-// Removed - using Supabase data instead
+const topicColors: Record<string, string> = {
+  'Tất cả': '#A5D6FF',
+  'Cổ Hy Lạp': '#FFEE99',
+  'Đông Phương': '#98E9C9',
+  'Hiện sinh': '#D5C7FF',
+  'Đạo đức học': '#FFB8B8',
+  'Triết học Hiện đại': '#A5D6FF',
+  'Chủ nghĩa Marx': '#FFB8B8'
+}
 
 export default function QuizPage() {
-  // UI State
+  // Navigation & Screen States
+  const [activeTab, setActiveTab] = useState<'quiz' | 'history'>('quiz')
   const [currentScreen, setCurrentScreen] = useState<Screen>('topic-selection')
+  const [loading, setLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+  
+  // Dashboard & Selecting States
   const [topics, setTopics] = useState<string[]>([])
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
-  const [questionsCount, setQuestionsCount] = useState(20)
+  const [questionsCount, setQuestionsCount] = useState(10)
+  const [topicStats, setTopicStats] = useState<Record<string, TopicProgress>>({})
+  const [smartBreakdown, setSmartBreakdown] = useState<TopicProgress | null>(null)
   
-  // Quiz State
+  // Ongoing Quiz States
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [score, setScore] = useState(0)
-  const [answers, setAnswers] = useState<Record<number, string>>({})
-  const [correctStatus, setCorrectStatus] = useState<Record<number, boolean>>({})
   
-  // Other State
-  const [loading, setLoading] = useState(false)
-  const [userId, setUserId] = useState<string | null>(null)
+  // Quiz tracking for review & retake
+  const [userSelections, setUserSelections] = useState<Record<number, string>>({}) // questionId -> letter
+  const [correctStatus, setCorrectStatus] = useState<Record<number, boolean>>({}) // questionId -> isCorrect
+  const [sessionQuestions, setSessionQuestions] = useState<QuizQuestion[]>([]) // store copy of session questions
+  
+  // History States
+  const [historyList, setHistoryList] = useState<QuizSession[]>([])
+  const [selectedHistorySession, setSelectedHistorySession] = useState<QuizSession | null>(null)
+  const [historyResponses, setHistoryResponses] = useState<QuizResponse[]>([])
+  const [historyQuestions, setHistoryQuestions] = useState<QuizQuestion[]>([])
+  
+  // Retake Wrong Only Flag
+  const [isRetakingWrong, setIsRetakingWrong] = useState(false)
 
-  // Load user and topics on mount
+  // Initialize: Load user info, topics, and overall progress stats
   useEffect(() => {
     const init = async () => {
-      if (!supabase) return
+      setLoading(true)
+      let uId: string | null = null
       
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) setUserId(user.id)
+      if (supabase) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          setUserId(user.id)
+          uId = user.id
+        }
+      }
       
       const topicList = await fetchTopics()
       setTopics(topicList)
+      
+      // Load stats for all topics
+      const statsMap: Record<string, TopicProgress> = {}
+      for (const topic of topicList) {
+        statsMap[topic] = await getTopicProgress(uId, topic)
+      }
+      setTopicStats(statsMap)
+      
+      // Load history
+      const history = await fetchQuizHistory(uId)
+      setHistoryList(history)
+      
+      setLoading(false)
     }
     
     init()
   }, [])
 
-  // ========== HANDLERS ==========
+  // Refreshes dashboard statistics and history list
+  const refreshStats = async () => {
+    const topicList = await fetchTopics()
+    const statsMap: Record<string, TopicProgress> = {}
+    for (const topic of topicList) {
+      statsMap[topic] = await getTopicProgress(userId, topic)
+    }
+    setTopicStats(statsMap)
+    
+    const history = await fetchQuizHistory(userId)
+    setHistoryList(history)
+  }
 
-  const handleTopicSelect = (topic: string) => {
+  // ========== ACTIONS & HANDLERS ==========
+
+  const handleTopicSelect = async (topic: string) => {
     setSelectedTopic(topic)
+    setLoading(true)
+    
+    // Get smart learning progress breakdown for this topic
+    const progress = await getTopicProgress(userId, topic)
+    setSmartBreakdown(progress)
+    
+    // Suggest maximum available questions or standard count
+    const maxAvailable = progress.totalQuestions - progress.correctCount
+    setQuestionsCount(Math.min(10, maxAvailable > 0 ? maxAvailable : progress.totalQuestions))
+    
+    setLoading(false)
     setCurrentScreen('question-count')
   }
 
   const handleStartQuiz = async () => {
-    if (!selectedTopic || !userId) return
-    
+    if (!selectedTopic) return
     setLoading(true)
+    setIsRetakingWrong(false)
     
     try {
-      // Create session
+      // 1. Create a session in DB/local storage
       const newSessionId = await createQuizSession(userId, selectedTopic, questionsCount)
       if (!newSessionId) {
         alert('Lỗi tạo phiên quiz')
         setLoading(false)
         return
       }
-      
       setSessionId(newSessionId)
       
-      // Fetch questions (with smart filtering for retries)
+      // 2. Fetch intelligent prioritized questions
       const newQuestions = await fetchQuestions(selectedTopic, questionsCount, userId, true)
       if (newQuestions.length === 0) {
-        alert('Không có câu hỏi cho chủ đề này')
+        alert('Chủ đề này không còn câu hỏi mới hoặc sai cần luyện tập! Bạn đã thuộc tất cả các câu hỏi.')
         setLoading(false)
         return
       }
       
+      // CAP BUG FIX (BUG 1): Set state with exactly the fetched questions count
       setQuestions(newQuestions)
+      setSessionQuestions(newQuestions) // keep copy for reviews
       setCurrentIndex(0)
       setSelectedAnswer(null)
       setScore(0)
-      setAnswers({})
+      setUserSelections({})
       setCorrectStatus({})
       setCurrentScreen('quiz')
     } catch (error) {
       console.error('Error starting quiz:', error)
       alert('Lỗi bắt đầu quiz')
     }
-    
     setLoading(false)
   }
 
-  const handleAnswerClick = (letter: string) => {
-    if (selectedAnswer) return
+  // Retake incorrect questions from the current session
+  const handleRetakeWrongQuestions = async () => {
+    // Filter questions from the completed session that were incorrect
+    const wrongQs = sessionQuestions.filter(q => correctStatus[q.id] === false)
+    if (wrongQs.length === 0) return
     
-    const currentQuestion = questions[currentIndex]
+    setLoading(true)
+    setIsRetakingWrong(true)
     
-    // Parse options from object format
-    const optionsObj = currentQuestion.options as any
+    try {
+      const newSessionId = await createQuizSession(userId, selectedTopic || 'Tập trung câu sai', wrongQs.length)
+      if (!newSessionId) {
+        alert('Lỗi tạo phiên ôn tập')
+        setLoading(false)
+        return
+      }
+      setSessionId(newSessionId)
+      setQuestions(wrongQs)
+      setSessionQuestions(wrongQs)
+      setCurrentIndex(0)
+      setSelectedAnswer(null)
+      setScore(0)
+      setUserSelections({})
+      setCorrectStatus({})
+      setCurrentScreen('quiz')
+    } catch (e) {
+      console.error(e)
+    }
+    setLoading(false)
+  }
+
+  const handleAnswerClick = async (letter: string) => {
+    if (selectedAnswer || !currentQuestion) return
+    
+    const optionsObj = currentQuestion.options || {}
     const isCorrect = optionsObj[letter]?.isCorrect || false
     
     setSelectedAnswer(letter)
-    setAnswers(prev => ({ ...prev, [currentQuestion.id]: letter }))
+    setUserSelections(prev => ({ ...prev, [currentQuestion.id]: letter }))
     setCorrectStatus(prev => ({ ...prev, [currentQuestion.id]: isCorrect }))
     
     if (isCorrect) {
       setScore(prev => prev + 1)
     }
     
-    // Record answer in DB
+    // Save to Database / localStorage asynchronously
     if (sessionId) {
-      recordAnswer(sessionId, currentQuestion.id, letter, isCorrect)
+      await recordAnswer(sessionId, currentQuestion.id, letter, isCorrect, userId)
     }
   }
 
@@ -126,170 +247,465 @@ export default function QuizPage() {
       setCurrentIndex(prev => prev + 1)
       setSelectedAnswer(null)
     } else {
-      // Quiz completed
+      // Quiz completed!
+      setLoading(true)
       if (sessionId) {
-        await completeQuizSession(sessionId, score)
+        const finalScore = isRetakingWrong ? score : score // exact score
+        await completeQuizSession(sessionId, finalScore, userId)
       }
+      await refreshStats()
       setCurrentScreen('results')
+      setLoading(false)
     }
   }
 
-  const handleRetry = () => {
+  // Browse back to Topic selection
+  const handleBackToTopics = async () => {
+    setLoading(true)
+    await refreshStats()
     setSelectedTopic(null)
-    setCurrentScreen('topic-selection')
-    setCurrentIndex(0)
-    setSelectedAnswer(null)
-    setScore(0)
-    setAnswers({})
-    setCorrectStatus({})
+    setSmartBreakdown(null)
     setSessionId(null)
     setQuestions([])
+    setSessionQuestions([])
+    setCurrentScreen('topic-selection')
+    setLoading(false)
   }
 
+  // Opens historical session review
+  const handleReviewHistorySession = async (session: QuizSession) => {
+    setLoading(true)
+    setSelectedHistorySession(session)
+    
+    // Fetch all recorded responses for this session
+    const responses = await fetchSessionResponses(session.id, userId)
+    setHistoryResponses(responses)
+    
+    // Fetch questions to render details
+    const topicQuestions = await fetchQuestions(session.topic, 999, userId, false)
+    
+    // Filter to only questions answered in this session and order them
+    const answeredIds = responses.map(r => r.question_id)
+    const filteredQuestions = topicQuestions.filter(q => answeredIds.includes(q.id))
+    const orderedQuestions = answeredIds
+      .map(id => filteredQuestions.find(q => q.id === id))
+      .filter((q): q is QuizQuestion => !!q)
+      
+    setHistoryQuestions(orderedQuestions)
+    
+    setLoading(false)
+    setCurrentScreen('review-answers')
+  }
+
+  // ========== CONSTANTS & HELPER VARIABLES ==========
   const currentQuestion = questions[currentIndex]
   const totalQuestions = questions.length
-  const progressPercent = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0
+  const progressPercent = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0
   const scorePercentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0
-
   const isAnswerCorrect = selectedAnswer ? correctStatus[currentQuestion?.id] : null
 
-  // ========== SCREEN: TOPIC SELECTION ==========
+  // Pre-calculate dashboard global statistics (unseen/completed ratios)
+  const calculateGlobalStats = () => {
+    let totalQuestionsAll = 0
+    let totalCorrectAll = 0
+    let totalWrongAll = 0
+    
+    Object.keys(topicStats).forEach(topic => {
+      if (topic !== 'Tất cả') {
+        const stat = topicStats[topic]
+        totalQuestionsAll += stat.totalQuestions
+        totalCorrectAll += stat.correctCount
+        totalWrongAll += stat.wrongCount
+      }
+    });
+    
+    return {
+      total: totalQuestionsAll,
+      correct: totalCorrectAll,
+      wrong: totalWrongAll,
+      progress: totalQuestionsAll > 0 ? Math.round((totalCorrectAll / totalQuestionsAll) * 100) : 0
+    }
+  }
+  const globalStats = calculateGlobalStats()
+
+  // Pre-calculate total history statistics
+  const completedQuizzesCount = historyList.length
+  const avgHistoryAccuracy = completedQuizzesCount > 0 
+    ? Math.round(historyList.reduce((acc, curr) => acc + (curr.total_questions > 0 ? (curr.score / curr.total_questions) * 100 : 0), 0) / completedQuizzesCount)
+    : 0
+
+  // ==================== SCREEN RENDERS ====================
+
+  // ========== TAB SELECTION BAR ==========
+  const renderTabBar = () => {
+    if (currentScreen !== 'topic-selection') return null
+    return (
+      <div className="tab-bar">
+        <button 
+          className={`tab-btn ${activeTab === 'quiz' ? 'active' : ''}`}
+          onClick={() => setActiveTab('quiz')}
+        >
+          <GraduationCap size={20} weight="bold" />
+          Học & Luyện Tập
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+          onClick={() => setActiveTab('history')}
+        >
+          <Clock size={20} weight="bold" />
+          Lịch Sử Học Tập
+        </button>
+      </div>
+    )
+  }
+
+  // ========== SCREEN 1: TOPIC SELECTION (DASHBOARD) ==========
   if (currentScreen === 'topic-selection') {
     return (
       <div className="page-wrapper">
         <div className="page-header">
-          <h1>Quiz Triết học</h1>
-          <p className="subtitle">Chọn chủ đề để bắt đầu</p>
+          <h1 className="gradient-text">Hệ Thống Quiz Triết Học Thông Minh</h1>
+          <p className="subtitle">Luyện tập thông minh, ghi nhớ dài hạn, làm chủ tri thức</p>
         </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', maxWidth: '900px', margin: '40px auto', padding: '0 16px' }}>
-          {topics.map(topic => {
-            const icon = topicIcons[topic] || '📖'
-            
-            return (
-              <button
-                key={topic}
-                onClick={() => handleTopicSelect(topic)}
-                style={{
-                  padding: '24px 16px',
-                  border: '2px solid var(--border)',
-                  borderRadius: '12px',
-                  background: 'var(--bg-primary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '12px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  color: 'var(--text-main)'
-                }}
-                onMouseOver={(e) => {
-                  const btn = e.currentTarget
-                  btn.style.borderColor = 'var(--mint-green)'
-                  btn.style.background = 'var(--bg-secondary)'
-                }}
-                onMouseOut={(e) => {
-                  const btn = e.currentTarget
-                  btn.style.borderColor = 'var(--border)'
-                  btn.style.background = 'var(--bg-primary)'
-                }}
-              >
-                <div style={{ fontSize: '2.5rem' }}>{icon}</div>
-                <div>{topic}</div>
-              </button>
-            )
-          })}
+
+        <div className="quiz-layout" style={{ maxWidth: '1000px', paddingBottom: '60px' }}>
+          {renderTabBar()}
+
+          {activeTab === 'quiz' ? (
+            <>
+              {/* Learning stats overview panel */}
+              <div className="stats-overview">
+                <div className="stat-widget-box">
+                  <div className="stat-widget-icon" style={{ background: 'var(--mint-green-light)', color: '#2E7D32' }}>
+                    <Target weight="bold" />
+                  </div>
+                  <div className="stat-widget-info">
+                    <span className="stat-widget-title">Đã Thành Thạo</span>
+                    <span className="stat-widget-value">{globalStats.correct} / {globalStats.total} câu</span>
+                  </div>
+                </div>
+
+                <div className="stat-widget-box">
+                  <div className="stat-widget-icon" style={{ background: 'var(--pastel-blue-light)', color: 'var(--pastel-blue-dark)' }}>
+                    <Sparkle weight="bold" />
+                  </div>
+                  <div className="stat-widget-info">
+                    <span className="stat-widget-title">Tiến Độ Tổng Quan</span>
+                    <span className="stat-widget-value">{globalStats.progress}% hoàn thành</span>
+                  </div>
+                </div>
+
+                <div className="stat-widget-box">
+                  <div className="stat-widget-icon" style={{ background: 'var(--soft-yellow-light)', color: '#F57F17' }}>
+                    <Medal weight="bold" />
+                  </div>
+                  <div className="stat-widget-info">
+                    <span className="stat-widget-title">Độ Chính Xác TB</span>
+                    <span className="stat-widget-value">{avgHistoryAccuracy}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                  ⏳ Đang tải dữ liệu học tập của bạn...
+                </div>
+              ) : (
+                <div className="topic-grid">
+                  {topics.map(topic => {
+                    const icon = topicIcons[topic] || '📖'
+                    const color = topicColors[topic] || '#E5E5EA'
+                    const stat = topicStats[topic] || { totalQuestions: 0, correctCount: 0, wrongCount: 0, unseenCount: 0, progressPercent: 0 }
+                    
+                    return (
+                      <div
+                        key={topic}
+                        className="topic-card"
+                        onClick={() => handleTopicSelect(topic)}
+                      >
+                        <div>
+                          <div className="topic-card-header">
+                            <div className="topic-card-icon" style={{ background: color + '33' }}>{icon}</div>
+                            <div>
+                              <h3 className="topic-card-title">{topic}</h3>
+                              <span className="topic-card-count">{stat.totalQuestions} câu hỏi</span>
+                            </div>
+                          </div>
+
+                          <div className="topic-card-progress-container">
+                            <div className="topic-card-progress-header">
+                              <span>Học thuộc</span>
+                              <span className="topic-card-progress-value">{stat.progressPercent}%</span>
+                            </div>
+                            <div className="progress-bar-bg" style={{ height: '6px' }}>
+                              <div 
+                                className="progress-bar-fill" 
+                                style={{ 
+                                  width: `${stat.progressPercent}%`, 
+                                  background: 'linear-gradient(90deg, #6DD5AB, #4CAF50)' 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="topic-card-stats-row">
+                          <span className="topic-stat-item">
+                            <span className="topic-stat-dot correct"></span>
+                            Đúng: {stat.correctCount}
+                          </span>
+                          <span className="topic-stat-item">
+                            <span className="topic-stat-dot wrong"></span>
+                            Cần ôn: {stat.wrongCount}
+                          </span>
+                          <span className="topic-stat-item">
+                            <span className="topic-stat-dot unseen"></span>
+                            Mới: {stat.unseenCount}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            /* HISTORY TAB */
+            <div>
+              <div className="fav-section" style={{ boxShadow: 'none', border: '1px solid var(--border)', borderRadius: '16px' }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                  <Clock weight="fill" color="var(--pastel-blue-dark)" />
+                  Nhật Ký Học Tập ({completedQuizzesCount} lượt hoàn thành)
+                </h3>
+                
+                {historyList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 12px', color: 'var(--text-secondary)' }}>
+                    📚 Bạn chưa thực hiện bài kiểm tra nào. Chọn chủ đề và học ngay hôm nay!
+                  </div>
+                ) : (
+                  <div className="history-list">
+                    {historyList.map(session => {
+                      const scorePercent = session.total_questions > 0 ? Math.round((session.score / session.total_questions) * 100) : 0
+                      
+                      // Format time correctly with UTC offset (+7) fallback parsing
+                      const parseUTCDate = (dateStr: string) => {
+                        let normalized = dateStr.replace(' ', 'T')
+                        if (!normalized.endsWith('Z') && !normalized.includes('+') && !normalized.match(/-\d{2}:\d{2}$/)) {
+                          normalized += 'Z'
+                        }
+                        return new Date(normalized)
+                      }
+                      
+                      const rawDate = session.completed_at || session.created_at
+                      const dateFormatted = rawDate 
+                        ? parseUTCDate(rawDate).toLocaleString('vi-VN', { 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric' 
+                          })
+                        : ''
+                      
+                      return (
+                        <div key={session.id} className="history-item">
+                          <div className="history-info">
+                            <span className="history-topic">
+                              {topicIcons[session.topic] || '📖'} {session.topic}
+                            </span>
+                            <span className="history-meta" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span><Calendar size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> {dateFormatted}</span>
+                              <span><ListNumbers size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> {session.total_questions} câu</span>
+                            </span>
+                          </div>
+                          
+                          <div className="history-score-container">
+                            <div className={`history-score-badge ${scorePercent >= 80 ? 'high' : ''}`}>
+                              {session.score}/{session.total_questions} ({scorePercent}%)
+                            </div>
+                            <button 
+                              className="btn btn-secondary"
+                              style={{ width: 'auto', padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem' }}
+                              onClick={() => handleReviewHistorySession(session)}
+                            >
+                              Xem đáp án <CaretRight />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
-  // ========== SCREEN: QUESTION COUNT SELECTOR ==========
+  // ========== SCREEN 2: QUESTION COUNT SELECTOR ==========
   if (currentScreen === 'question-count') {
-    return (
-      <div className="page-wrapper">
-        <div className="page-header">
-          <h1>Chọn số lượng câu hỏi</h1>
-          <p className="subtitle">Chủ đề: <strong>{selectedTopic}</strong></p>
-        </div>
-        
-        <div style={{ maxWidth: '500px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '24px', padding: '0 16px' }}>
-          <div style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px' }}>
-            <label style={{ display: 'block', marginBottom: '16px', fontWeight: 600, fontSize: '1rem' }}>
-              📝 Số lượng câu hỏi
-            </label>
-            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--mint-green)', marginBottom: '16px', textAlign: 'center' }}>
-              {questionsCount}
-            </div>
-            <input 
-              type="range" 
-              min="1" 
-              max="50" 
-              value={questionsCount}
-              onChange={(e) => setQuestionsCount(parseInt(e.target.value))}
-              style={{ width: '100%', cursor: 'pointer', height: '6px' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '12px' }}>
-              <span>1</span>
-              <span>50</span>
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--pastel-blue-light)', padding: '16px', borderRadius: '12px', borderLeft: '4px solid var(--pastel-blue-dark)' }}>
-            <p style={{ margin: '0', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-              💡 <strong>Ghi chú:</strong> Hệ thống sẽ chỉ hiển thị những câu hỏi bạn trả lời sai trước đó + các câu mới. Những câu đã trả lời đúng sẽ không hiển thị lại.
-            </p>
-          </div>
-          
-          <button 
-            className="btn btn-primary"
-            onClick={handleStartQuiz}
-            disabled={loading}
-            style={{ padding: '14px', fontSize: '1rem', fontWeight: 600 }}
-          >
-            {loading ? '⏳ Đang tải...' : '▶️ Bắt đầu Quiz'}
-          </button>
-          
-          <button 
-            onClick={() => setCurrentScreen('topic-selection')}
-            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '8px', fontSize: '0.95rem', textDecoration: 'underline' }}
-          >
-            ← Quay lại chọn chủ đề
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ========== SCREEN: QUIZ ==========
-  if (currentScreen === 'quiz' && currentQuestion) {
-    const optionsObj = currentQuestion.options as any
-    const optionLetters = ['A', 'B', 'C', 'D']
+    const stat = smartBreakdown || { totalQuestions: 0, correctCount: 0, wrongCount: 0, unseenCount: 0 }
+    
+    // Remaining count that the user actually should study (incorrect + unseen)
+    const remainingCount = stat.totalQuestions - stat.correctCount
+    
+    // Maximum questions allowed (cap at remaining count or totalQuestions, up to 50)
+    const maxSelectable = Math.min(50, remainingCount > 0 ? remainingCount : stat.totalQuestions)
     
     return (
       <div className="page-wrapper">
         <div className="page-header">
-          <h1>Quiz Triết học</h1>
-          <p className="subtitle">{selectedTopic}</p>
+          <h1>Thiết Lập Bài Quiz</h1>
+          <p className="subtitle">Chủ đề: <strong style={{ color: 'var(--pastel-blue-dark)' }}>{selectedTopic}</strong></p>
+        </div>
+        
+        <div className="quiz-layout" style={{ maxWidth: '560px' }}>
+          <div className="question-card" style={{ marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <GraduationCap weight="bold" color="var(--pastel-blue-dark)" />
+              Phân tích học tập thông minh
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <span>Tổng số câu hỏi trong CSDL:</span>
+                <strong style={{ color: 'var(--text-main)' }}>{stat.totalQuestions} câu</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', color: '#2E7D32' }}>
+                <span>Đã thành thạo (đúng trước đó):</span>
+                <strong>{stat.correctCount} câu (sẽ không lặp lại)</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <span>Cần củng cố (trả lời sai):</span>
+                <strong style={{ color: '#C62828' }}>{stat.wrongCount} câu</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                <span>Chưa từng làm:</span>
+                <strong style={{ color: 'var(--text-main)' }}>{stat.unseenCount} câu</strong>
+              </div>
+            </div>
+            
+            <div 
+              style={{ 
+                marginTop: '16px', 
+                background: 'var(--pastel-blue-light)', 
+                padding: '12px 16px', 
+                borderRadius: '12px', 
+                fontSize: '0.85rem', 
+                lineHeight: '1.4',
+                color: 'var(--text-main)',
+                borderLeft: '4px solid var(--pastel-blue-dark)'
+              }}
+            >
+              🎯 <strong>Logic Thông Minh:</strong> Lượt làm này sẽ ưu tiên hiển thị {stat.wrongCount} câu đã trả lời sai để ôn luyện, tiếp theo là {stat.unseenCount} câu mới. Hệ thống tuyệt đối không hỏi lại {stat.correctCount} câu bạn đã nắm vững!
+            </div>
+          </div>
+          
+          <div className="question-card" style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', fontWeight: 700, fontSize: '1rem', marginBottom: '14px' }}>
+              📝 Chọn số lượng câu hỏi muốn làm:
+            </label>
+            
+            <div className="count-chip-grid">
+              {[5, 10, 15, maxSelectable].map(count => {
+                if (count <= 0) return null
+                const isActive = questionsCount === count
+                const label = count === maxSelectable ? 'Tối đa' : `${count} câu`
+                return (
+                  <button 
+                    key={count} 
+                    className={`count-chip ${isActive ? 'active' : ''}`}
+                    onClick={() => setQuestionsCount(count)}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            
+            <div style={{ padding: '8px 0' }}>
+              <input 
+                type="range" 
+                min="1" 
+                max={maxSelectable} 
+                value={questionsCount}
+                onChange={(e) => setQuestionsCount(parseInt(e.target.value))}
+                style={{ width: '100%', cursor: 'pointer', height: '6px' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                <span>1 câu</span>
+                <span>Tối đa: {maxSelectable} câu</span>
+              </div>
+            </div>
+            
+            <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '1.3rem', fontWeight: 800, color: 'var(--pastel-blue-dark)' }}>
+              👉 Lượt này làm: {questionsCount} câu hỏi
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <button 
+              className="btn btn-primary"
+              onClick={handleStartQuiz}
+              disabled={loading || maxSelectable <= 0}
+              style={{ padding: '14px', fontSize: '1rem', fontWeight: 700 }}
+            >
+              {loading ? '⏳ Đang thiết lập lượt học...' : '▶️ Bắt đầu học ngay'}
+            </button>
+            
+            <button 
+              className="btn btn-secondary"
+              onClick={handleBackToTopics}
+            >
+              Quay lại chọn chủ đề
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ========== SCREEN 3: QUIZ (LEARNING SESSION) ==========
+  if (currentScreen === 'quiz' && currentQuestion) {
+    const optionsObj = currentQuestion.options || {}
+    const optionLetters = ['A', 'B', 'C', 'D']
+    
+    return (
+      <div className="page-wrapper">
+        <div className="page-header" style={{ paddingBottom: '0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--pastel-blue-dark)', background: 'var(--pastel-blue-light)', padding: '4px 12px', borderRadius: '20px' }}>
+              📖 Chủ đề: {selectedTopic}
+            </span>
+            {isRetakingWrong && (
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#C62828', background: '#FFEEEE', padding: '4px 12px', borderRadius: '20px' }}>
+                🔄 Ôn tập câu sai
+              </span>
+            )}
+          </div>
         </div>
         
         <div className="quiz-layout">
           <div className="progress-container">
-            <div className="progress-text">Câu {currentIndex + 1}/{totalQuestions}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span className="progress-text" style={{ margin: '0' }}>Câu {currentIndex + 1} trên tổng số {totalQuestions}</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>{Math.round(progressPercent)}%</span>
+            </div>
             <div className="progress-bar-bg">
-              <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }}></div>
+              <div 
+                className="progress-bar-fill" 
+                style={{ 
+                  width: `${progressPercent}%`,
+                  background: 'linear-gradient(90deg, #5BA8E0, #98E9C9)' 
+                }}
+              ></div>
             </div>
           </div>
           
-          <div className="question-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--pastel-blue-dark)', background: 'var(--pastel-blue-light)', padding: '4px 12px', borderRadius: '20px' }}>
-                {selectedTopic}
-              </span>
-            </div>
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.4, marginBottom: '24px', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+          <div className="question-card" style={{ boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, lineHeight: 1.45, marginBottom: '24px', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
               {currentQuestion.question}
             </h3>
             
@@ -298,12 +714,13 @@ export default function QuizPage() {
                 const option = optionsObj[letter]
                 if (!option) return null
                 
+                // Styling states based on answer clicks
                 let statusClass = ''
                 if (selectedAnswer) {
                   if (letter === selectedAnswer) {
                     statusClass = option.isCorrect ? 'correct' : 'wrong'
                   } else if (option.isCorrect) {
-                    statusClass = 'correct'
+                    statusClass = 'correct' // Highlight correct answer if user clicked wrong one
                   } else {
                     statusClass = 'dimmed'
                   }
@@ -315,31 +732,44 @@ export default function QuizPage() {
                     className={`answer-btn ${statusClass}`}
                     onClick={() => handleAnswerClick(letter)}
                     disabled={!!selectedAnswer}
-                    style={{ opacity: selectedAnswer && statusClass === 'dimmed' ? 0.5 : 1 }}
+                    style={{ 
+                      opacity: selectedAnswer && statusClass === 'dimmed' ? 0.4 : 1,
+                      transform: selectedAnswer ? 'none' : undefined,
+                      transition: 'all 0.2s ease'
+                    }}
                   >
-                    <span className="opt-letter">{letter}</span> {option.text}
+                    <span className="opt-letter">{letter}</span> 
+                    <span style={{ flex: 1 }}>{option.text}</span>
                   </button>
                 )
               })}
             </div>
             
+            {/* Show explanation immediately, regardless of correct or wrong, as requested! */}
             {selectedAnswer && (
               <div className={`feedback-card ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
                 <div className="feedback-header">
                   {isAnswerCorrect ? (
-                    <CheckCircle weight="fill" color="#4CAF50" />
+                    <CheckCircle weight="fill" color="#4CAF50" size={24} />
                   ) : (
-                    <XCircle weight="fill" color="#F44336" />
+                    <XCircle weight="fill" color="#F44336" size={24} />
                   )}
                   <span className={`feedback-title ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
-                    {isAnswerCorrect ? 'Chính xác! 🎉' : 'Chưa đúng rồi!'}
+                    {isAnswerCorrect ? 'Câu Trả Lời Chính Xác! 🎉' : 'Rất tiếc, câu trả lời chưa đúng.'}
                   </span>
                 </div>
-                <p className="feedback-desc">
-                  {currentQuestion.explanation}
+                
+                <p className="feedback-desc" style={{ marginTop: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                  <strong>Giải thích chi tiết:</strong> {currentQuestion.explanation}
                 </p>
-                <button className="btn btn-primary mt-3" onClick={handleNextQuestion}>
-                  {currentIndex + 1 === totalQuestions ? 'Xem kết quả' : 'Câu tiếp theo'} <ArrowRight />
+                
+                <button 
+                  className="btn btn-primary mt-3" 
+                  onClick={handleNextQuestion}
+                  style={{ display: 'inline-flex', width: 'auto', padding: '10px 24px', borderRadius: '12px' }}
+                >
+                  {currentIndex + 1 === totalQuestions ? 'Xem kết quả bài học' : 'Sang câu hỏi tiếp theo'} 
+                  <ArrowRight weight="bold" />
                 </button>
               </div>
             )}
@@ -349,62 +779,181 @@ export default function QuizPage() {
     )
   }
 
-  // ========== SCREEN: RESULTS ==========
+  // ========== SCREEN 4: RESULTS ==========
   if (currentScreen === 'results') {
     const correctCount = score
     const wrongCount = totalQuestions - score
     
     return (
       <div className="page-wrapper">
-        <div className="page-header">
-          <h1>Kết quả Quiz</h1>
+        <div className="page-header" style={{ textAlign: 'center' }}>
+          <h1 className="gradient-text">Kết Quả Bài Học</h1>
           <p className="subtitle">{selectedTopic}</p>
         </div>
         
-        <div style={{ maxWidth: '500px', margin: '40px auto' }}>
-          <div className="question-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>
-              {scorePercentage === 100 ? '🏆' : scorePercentage >= 80 ? '🌟' : scorePercentage >= 60 ? '👍' : '📚'}
+        <div className="quiz-layout" style={{ maxWidth: '540px' }}>
+          <div className="question-card" style={{ textAlign: 'center', padding: '36px 24px', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ fontSize: '4.5rem', marginBottom: '16px', animation: 'floatY 3s ease-in-out infinite' }}>
+              {scorePercentage >= 90 ? '🏆' : scorePercentage >= 80 ? '🌟' : scorePercentage >= 60 ? '👍' : '📚'}
             </div>
-            <h2 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Hoàn thành Quiz!</h2>
-            <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-              Bạn trả lời đúng <strong>{correctCount}/{totalQuestions}</strong> câu hỏi.
+            
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
+              {scorePercentage >= 90 ? 'Xuất sắc! Bạn làm chủ rồi!' : scorePercentage >= 60 ? 'Tốt! Hãy tiếp tục rèn luyện!' : 'Học tập là một quá trình lâu dài!'}
+            </h2>
+            
+            <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+              Bạn đã hoàn thành chính xác <strong>{correctCount} trên {totalQuestions}</strong> câu hỏi.
             </p>
             
-            <div style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '3rem', color: 'var(--mint-green)', margin: '0 0 8px 0' }}>
+            <div style={{ background: 'var(--bg-secondary)', padding: '20px', borderRadius: '16px', marginBottom: '28px', border: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: '3.2rem', color: 'var(--pastel-blue-dark)', fontWeight: 900, margin: '0 0 4px 0', letterSpacing: '-1px' }}>
                 {scorePercentage}%
               </h3>
-              <p style={{ margin: '0 0 16px 0', color: 'var(--text-secondary)' }}>Tỷ lệ thành công</p>
+              <p style={{ margin: '0 0 16px 0', color: 'var(--text-muted)', fontSize: '0.88rem', fontWeight: 600, textTransform: 'uppercase' }}>Tỉ Lệ Chính Xác</p>
               
               <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: '#4CAF50', fontSize: '1.5rem', fontWeight: 'bold' }}>{correctCount}</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>✓ Đúng</div>
+                <div style={{ flex: 1, background: 'var(--white)', padding: '10px', borderRadius: '12px' }}>
+                  <div style={{ color: '#4CAF50', fontSize: '1.3rem', fontWeight: 'bold' }}>{correctCount}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>✓ Đúng</div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: '#F44336', fontSize: '1.5rem', fontWeight: 'bold' }}>{wrongCount}</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>✗ Sai</div>
+                <div style={{ flex: 1, background: 'var(--white)', padding: '10px', borderRadius: '12px' }}>
+                  <div style={{ color: '#F44336', fontSize: '1.3rem', fontWeight: 'bold' }}>{wrongCount}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>✗ Sai</div>
                 </div>
               </div>
             </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button 
-                className="btn btn-primary"
-                onClick={handleRetry}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-              >
-                <ArrowCounterClockwise weight="bold" /> Làm lại
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {wrongCount > 0 && (
+                <button 
+                  className="btn btn-primary"
+                  onClick={handleRetakeWrongQuestions}
+                  style={{ background: 'linear-gradient(135deg, #FFB8B8, #FF9800)', color: '#6A1B00', boxShadow: 'none', fontWeight: 700 }}
+                >
+                  <ArrowCounterClockwise weight="bold" /> Luyện tập các câu trả lời sai ({wrongCount} câu)
+                </button>
+              )}
+              
               <button 
                 className="btn btn-secondary"
-                onClick={handleRetry}
-                style={{ padding: '12px' }}
+                onClick={() => setCurrentScreen('review-answers')}
+                style={{ fontWeight: 600 }}
               >
-                ← Quay lại chủ đề
+                <BookOpen weight="bold" /> Xem lại chi tiết toàn bộ đáp án
+              </button>
+              
+              <button 
+                className="btn btn-secondary"
+                onClick={handleBackToTopics}
+                style={{ fontWeight: 600 }}
+              >
+                Tiếp tục học chủ đề khác
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ========== SCREEN 5: REVIEW ANSWERS OF THE CURRENT SESSION ==========
+  if (currentScreen === 'review-answers') {
+    const isFromHistory = !!selectedHistorySession
+    const questionsToReview = isFromHistory ? historyQuestions : sessionQuestions
+    
+    // Mapping selections
+    const selections = isFromHistory 
+      ? historyResponses.reduce((acc, curr) => ({ ...acc, [curr.question_id]: curr.selected_option_letter }), {} as Record<number, string>)
+      : userSelections
+      
+    const correctMap = isFromHistory 
+      ? historyResponses.reduce((acc, curr) => ({ ...acc, [curr.question_id]: curr.is_correct }), {} as Record<number, boolean>)
+      : correctStatus
+
+    return (
+      <div className="page-wrapper">
+        <div className="page-header">
+          <h1>Đánh Giá Chi Tiết Bài Học</h1>
+          <p className="subtitle">Chủ đề: <strong>{isFromHistory ? selectedHistorySession.topic : selectedTopic}</strong></p>
+        </div>
+        
+        <div className="quiz-layout" style={{ maxWidth: '800px', paddingBottom: '80px' }}>
+          <div className="review-card-container">
+            {questionsToReview.map((q, idx) => {
+              const userSelected = selections[q.id]
+              const isCorrect = correctMap[q.id]
+              const optionsObj = q.options || {}
+              const optionLetters = ['A', 'B', 'C', 'D']
+              
+              return (
+                <div key={q.id} className={`review-card ${isCorrect ? 'correct' : 'wrong'}`}>
+                  <div className="review-question-header">
+                    <span>CÂU HỎI {idx + 1}</span>
+                    <span style={{ color: isCorrect ? '#2E7D32' : '#C62828', fontWeight: 700 }}>
+                      {isCorrect ? '✓ Trả lời đúng' : '✗ Trả lời sai'}
+                    </span>
+                  </div>
+                  
+                  <div className="review-question-text">{q.question}</div>
+                  
+                  <div>
+                    {optionLetters.map(letter => {
+                      const option = optionsObj[letter]
+                      if (!option) return null
+                      
+                      const isUserChoice = userSelected === letter
+                      const isCorrectChoice = option.isCorrect
+                      
+                      let rowClass = ''
+                      if (isUserChoice && isCorrectChoice) {
+                        rowClass = 'both-choices'
+                      } else if (isUserChoice) {
+                        rowClass = 'user-selected'
+                      } else if (isCorrectChoice) {
+                        rowClass = 'correct-choice'
+                      }
+                      
+                      return (
+                        <div key={letter} className={`review-option-row ${rowClass}`}>
+                          <span className="review-option-badge">{letter}</span>
+                          <span style={{ flex: 1 }}>{option.text}</span>
+                          {isUserChoice && !isCorrectChoice && (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#C62828' }}>Bạn chọn</span>
+                          )}
+                          {isCorrectChoice && (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2E7D32' }}>Đáp án đúng</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  
+                  <div className="review-explanation">
+                    <strong>Giải thích khoa học:</strong> {q.explanation}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          
+          <div style={{ marginTop: '28px', textAlign: 'center' }}>
+            <button 
+              className="btn btn-primary"
+              onClick={() => {
+                if (isFromHistory) {
+                  setSelectedHistorySession(null)
+                  setHistoryQuestions([])
+                  setHistoryResponses([])
+                  setCurrentScreen('topic-selection')
+                  setActiveTab('history')
+                } else {
+                  setCurrentScreen('results')
+                }
+              }}
+              style={{ display: 'inline-flex', width: 'auto', padding: '12px 32px', borderRadius: '12px' }}
+            >
+              Quay lại kết quả
+            </button>
           </div>
         </div>
       </div>

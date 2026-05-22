@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Student, PaperPlaneRight, DotsThree } from '@phosphor-icons/react'
 import { GoogleGenerativeAI } from '@google/generative-ai'
@@ -81,14 +81,14 @@ const renderInline = (line: string) => {
 
 const renderMessage = (text: string) => {
   const lines = text.split(/\r?\n/)
-  const blocks: JSX.Element[] = []
+  const blocks: React.ReactElement[] = []
   let listItems: string[] = []
   let listType: 'ul' | 'ol' | null = null
   let blockIndex = 0
 
   const flushList = () => {
     if (!listItems.length || !listType) return
-    const ListTag = (listType === 'ol' ? 'ol' : 'ul') as keyof JSX.IntrinsicElements
+    const ListTag = listType === 'ol' ? 'ol' : 'ul'
     blocks.push(
       <ListTag className="msg-list" key={`list-${blockIndex++}`}>
         {listItems.map((item, idx) => (
@@ -111,7 +111,7 @@ const renderMessage = (text: string) => {
     if (headingMatch) {
       flushList()
       const level = headingMatch[1].length
-      const HeadingTag = (level === 1 ? 'h3' : level === 2 ? 'h4' : 'h5') as keyof JSX.IntrinsicElements
+      const HeadingTag = level === 1 ? 'h3' : level === 2 ? 'h4' : 'h5'
       blocks.push(
         <HeadingTag className="msg-heading" key={`h-${blockIndex++}`}>
           {renderInline(headingMatch[2])}

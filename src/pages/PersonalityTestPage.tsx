@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CaretLeft, Sparkle, ArrowRight, UserCircle } from '@phosphor-icons/react'
+import { CaretLeft, Sparkle, ArrowRight } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 
 interface Answer {
