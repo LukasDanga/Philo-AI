@@ -53,10 +53,6 @@ export default function LoginPage() {
               <GoogleLogo weight="fill" />
               Tiếp tục với Google
             </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/explore')}>
-              <EnvelopeSimple />
-              Chạy ẩn danh (Khách)
-            </button>
           </div>
           
           <p className="login-footer">Bằng việc tiếp tục, bạn đồng ý với <a href="#">Điều khoản</a> và <a href="#">Chính sách</a> của chúng tôi.</p>
