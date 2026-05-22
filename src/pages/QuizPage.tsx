@@ -1,322 +1,415 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, ArrowRight, ArrowCounterClockwise } from '@phosphor-icons/react'
+import { fetchTopics, fetchQuestions, createQuizSession, recordAnswer, completeQuizSession, getTopicStats, type QuizQuestion } from '../lib/quiz'
+import { supabase } from '../lib/supabase'
+
+type Screen = 'topic-selection' | 'question-count' | 'quiz' | 'results'
+
+const topicIcons: Record<string, string> = {
+  'Tất cả': '🌍',
+  'Cổ Hy Lạp': '🏛️',
+  'Đông Phương': '☯️',
+  'Hiện sinh': '🌀',
+  'Đạo đức học': '⚖️',
+  'Triết học Hiện đại': '💡'
+}
 
 // Mock Data: 10 câu hỏi
-const mockQuestions = [
-  {
-    id: 1,
-    topic: 'Triết học Hiện đại',
-    question: 'Ai là tác giả của câu nói nổi tiếng "Tôi tư duy, nên tôi tồn tại"?',
-    options: [
-      { letter: 'A', text: 'Immanuel Kant', isCorrect: false },
-      { letter: 'B', text: 'René Descartes', isCorrect: true },
-      { letter: 'C', text: 'John Locke', isCorrect: false },
-      { letter: 'D', text: 'Friedrich Nietzsche', isCorrect: false }
-    ],
-    explanation: 'René Descartes đã viết "Cogito, ergo sum" trong cuốn Phương pháp luận (1637). Đây là nguyên lý nền tảng của triết học phương Tây hiện đại.'
-  },
-  {
-    id: 2,
-    topic: 'Cổ Hy Lạp',
-    question: 'Theo Plato, thế giới thực sự chúng ta đang sống chỉ là cái bóng của cái gì?',
-    options: [
-      { letter: 'A', text: 'Thế giới Vật chất', isCorrect: false },
-      { letter: 'B', text: 'Thế giới Ý niệm (Forms)', isCorrect: true },
-      { letter: 'C', text: 'Thế giới Thần linh', isCorrect: false },
-      { letter: 'D', text: 'Trí tưởng tượng', isCorrect: false }
-    ],
-    explanation: 'Plato đưa ra "Ngụ ngôn cái hang", cho rằng thế giới vật lý chỉ là bản sao mờ nhạt của Thế giới Ý niệm hoàn hảo.'
-  },
-  {
-    id: 3,
-    topic: 'Cổ Hy Lạp',
-    question: 'Triết gia nào bị kết án tử hình bằng cách uống thuốc độc (cây cần độc)?',
-    options: [
-      { letter: 'A', text: 'Aristotle', isCorrect: false },
-      { letter: 'B', text: 'Pythagoras', isCorrect: false },
-      { letter: 'C', text: 'Socrates', isCorrect: true },
-      { letter: 'D', text: 'Epicurus', isCorrect: false }
-    ],
-    explanation: 'Socrates bị tòa án Athens kết án tử hình vào năm 399 TCN với tội danh "làm hư hỏng thanh niên" và không tin vào các vị thần của thành bang.'
-  },
-  {
-    id: 4,
-    topic: 'Hiện sinh',
-    question: 'Tác phẩm "Zarathustra đã nói như thế" là của triết gia nào?',
-    options: [
-      { letter: 'A', text: 'Arthur Schopenhauer', isCorrect: false },
-      { letter: 'B', text: 'Søren Kierkegaard', isCorrect: false },
-      { letter: 'C', text: 'Jean-Paul Sartre', isCorrect: false },
-      { letter: 'D', text: 'Friedrich Nietzsche', isCorrect: true }
-    ],
-    explanation: 'Đây là tác phẩm nổi tiếng nhất của Nietzsche, nơi ông đưa ra khái niệm "Siêu nhân" (Übermensch).'
-  },
-  {
-    id: 5,
-    topic: 'Đông Phương',
-    question: 'Khái niệm "Vô vi" (không làm gì mà không gì là không làm) thuộc trường phái triết học nào?',
-    options: [
-      { letter: 'A', text: 'Nho giáo', isCorrect: false },
-      { letter: 'B', text: 'Đạo giáo', isCorrect: true },
-      { letter: 'C', text: 'Pháp gia', isCorrect: false },
-      { letter: 'D', text: 'Mặc gia', isCorrect: false }
-    ],
-    explanation: '"Vô vi" là cốt lõi của Đạo giáo (Lão Tử, Trang Tử), khuyên con người sống thuận theo tự nhiên (Đạo).'
-  },
-  {
-    id: 6,
-    topic: 'Đông Phương',
-    question: 'Tứ Diệu Đế (Bốn sự thật cao quý) là nền tảng của tôn giáo/triết học nào?',
-    options: [
-      { letter: 'A', text: 'Ấn Độ giáo', isCorrect: false },
-      { letter: 'B', text: 'Phật giáo', isCorrect: true },
-      { letter: 'C', text: 'Kỳ Na giáo', isCorrect: false },
-      { letter: 'D', text: 'Thần đạo', isCorrect: false }
-    ],
-    explanation: 'Đức Phật Thích Ca Mâu Ni đã giảng về Tứ Diệu Đế (Khổ, Tập, Diệt, Đạo) trong bài thuyết pháp đầu tiên.'
-  },
-  {
-    id: 7,
-    topic: 'Đạo đức học',
-    question: 'Chủ nghĩa Vị lợi (Utilitarianism) cho rằng hành động đúng là hành động mang lại...',
-    options: [
-      { letter: 'A', text: 'Nhiều hạnh phúc nhất cho nhiều người nhất', isCorrect: true },
-      { letter: 'B', text: 'Sự hoàn thiện cá nhân tuyệt đối', isCorrect: false },
-      { letter: 'C', text: 'Sự tuân thủ đúng các quy tắc đạo đức', isCorrect: false },
-      { letter: 'D', text: 'Sự công bằng tuyệt đối cho mọi giai cấp', isCorrect: false }
-    ],
-    explanation: 'Jeremy Bentham và John Stuart Mill lập luận rằng giá trị đạo đức được xác định bởi tính hữu dụng và kết quả mang lại.'
-  },
-  {
-    id: 8,
-    topic: 'Hiện sinh',
-    question: 'Câu nói "Thượng đế đã chết" ngụ ý điều gì theo Nietzsche?',
-    options: [
-      { letter: 'A', text: 'Khoa học đã chứng minh không có Thượng đế', isCorrect: false },
-      { letter: 'B', text: 'Tôn giáo không còn là nền tảng đạo đức trung tâm của xã hội phương Tây', isCorrect: true },
-      { letter: 'C', text: 'Các vị thần La Mã đã bị tiêu diệt', isCorrect: false },
-      { letter: 'D', text: 'Sự diệt vong của nhân loại', isCorrect: false }
-    ],
-    explanation: 'Nietzsche không nói về cái chết vật lý, mà về việc niềm tin vào Cơ Đốc giáo đang sụp đổ ở châu Âu thời Khai sáng.'
-  },
-  {
-    id: 9,
-    topic: 'Cổ Hy Lạp',
-    question: 'Trường phái Khắc kỷ (Stoicism) do ai sáng lập?',
-    options: [
-      { letter: 'A', text: 'Zeno xứ Citium', isCorrect: true },
-      { letter: 'B', text: 'Seneca', isCorrect: false },
-      { letter: 'C', text: 'Marcus Aurelius', isCorrect: false },
-      { letter: 'D', text: 'Epictetus', isCorrect: false }
-    ],
-    explanation: 'Zeno giảng dạy tại Stoa Poikile (Hành lang Sơn màu) ở Athens vào đầu thế kỷ thứ 3 TCN, từ đó sinh ra tên gọi Stoicism.'
-  },
-  {
-    id: 10,
-    topic: 'Cổ Hy Lạp',
-    question: 'Triết gia nào thuộc trường phái Khuyển nho (Cynicism), nổi tiếng với việc sống trong một chiếc chum?',
-    options: [
-      { letter: 'A', text: 'Heraclitus', isCorrect: false },
-      { letter: 'B', text: 'Thales', isCorrect: false },
-      { letter: 'C', text: 'Diogenes xứ Sinope', isCorrect: true },
-      { letter: 'D', text: 'Parmenides', isCorrect: false }
-    ],
-    explanation: 'Diogenes sống cuộc đời ăn xin, ngủ trong chum nước, và từng yêu cầu Alexander Đại đế "tránh ra cho tôi nhờ chút ánh nắng".'
-  }
-];
-
-const topics = [
-  { id: 'Tất cả', icon: '🌍' },
-  { id: 'Cổ Hy Lạp', icon: '🏛️' },
-  { id: 'Đông Phương', icon: '☯️' },
-  { id: 'Hiện sinh', icon: '🌀' },
-  { id: 'Đạo đức học', icon: '⚖️' }
-];
+// Removed - using Supabase data instead
 
 export default function QuizPage() {
-  const [activeTopic, setActiveTopic] = useState('Tất cả')
+  // UI State
+  const [currentScreen, setCurrentScreen] = useState<Screen>('topic-selection')
+  const [topics, setTopics] = useState<string[]>([])
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+  const [questionsCount, setQuestionsCount] = useState(20)
+  
+  // Quiz State
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [score, setScore] = useState(0)
-  const [isCompleted, setIsCompleted] = useState(false)
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const [correctStatus, setCorrectStatus] = useState<Record<number, boolean>>({})
+  
+  // Other State
+  const [loading, setLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
-  // Filter questions based on topic
-  const filteredQuestions = activeTopic === 'Tất cả' 
-    ? mockQuestions 
-    : mockQuestions.filter(q => q.topic === activeTopic)
+  // Load user and topics on mount
+  useEffect(() => {
+    const init = async () => {
+      if (!supabase) return
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setUserId(user.id)
+      
+      const topicList = await fetchTopics()
+      setTopics(topicList)
+    }
+    
+    init()
+  }, [])
 
-  const currentQuestion = filteredQuestions[currentIndex]
-  const totalQuestions = filteredQuestions.length
+  // ========== HANDLERS ==========
 
-  const handleTopicChange = (topicId: string) => {
-    setActiveTopic(topicId)
-    setCurrentIndex(0)
-    setSelectedAnswer(null)
-    setScore(0)
-    setIsCompleted(false)
+  const handleTopicSelect = (topic: string) => {
+    setSelectedTopic(topic)
+    setCurrentScreen('question-count')
+  }
+
+  const handleStartQuiz = async () => {
+    if (!selectedTopic || !userId) return
+    
+    setLoading(true)
+    
+    try {
+      // Create session
+      const newSessionId = await createQuizSession(userId, selectedTopic, questionsCount)
+      if (!newSessionId) {
+        alert('Lỗi tạo phiên quiz')
+        setLoading(false)
+        return
+      }
+      
+      setSessionId(newSessionId)
+      
+      // Fetch questions (with smart filtering for retries)
+      const newQuestions = await fetchQuestions(selectedTopic, questionsCount, userId, true)
+      if (newQuestions.length === 0) {
+        alert('Không có câu hỏi cho chủ đề này')
+        setLoading(false)
+        return
+      }
+      
+      setQuestions(newQuestions)
+      setCurrentIndex(0)
+      setSelectedAnswer(null)
+      setScore(0)
+      setAnswers({})
+      setCorrectStatus({})
+      setCurrentScreen('quiz')
+    } catch (error) {
+      console.error('Error starting quiz:', error)
+      alert('Lỗi bắt đầu quiz')
+    }
+    
+    setLoading(false)
   }
 
   const handleAnswerClick = (letter: string) => {
-    if (selectedAnswer) return // Already answered
-    setSelectedAnswer(letter)
+    if (selectedAnswer) return
     
-    if (isCorrectAnswer(letter)) {
+    const currentQuestion = questions[currentIndex]
+    
+    // Parse options from object format
+    const optionsObj = currentQuestion.options as any
+    const isCorrect = optionsObj[letter]?.isCorrect || false
+    
+    setSelectedAnswer(letter)
+    setAnswers(prev => ({ ...prev, [currentQuestion.id]: letter }))
+    setCorrectStatus(prev => ({ ...prev, [currentQuestion.id]: isCorrect }))
+    
+    if (isCorrect) {
       setScore(prev => prev + 1)
+    }
+    
+    // Record answer in DB
+    if (sessionId) {
+      recordAnswer(sessionId, currentQuestion.id, letter, isCorrect)
     }
   }
 
-  const handleNextQuestion = () => {
-    if (currentIndex + 1 < totalQuestions) {
+  const handleNextQuestion = async () => {
+    if (currentIndex + 1 < questions.length) {
       setCurrentIndex(prev => prev + 1)
       setSelectedAnswer(null)
     } else {
-      setIsCompleted(true)
+      // Quiz completed
+      if (sessionId) {
+        await completeQuizSession(sessionId, score)
+      }
+      setCurrentScreen('results')
     }
   }
 
-  const restartQuiz = () => {
+  const handleRetry = () => {
+    setSelectedTopic(null)
+    setCurrentScreen('topic-selection')
     setCurrentIndex(0)
     setSelectedAnswer(null)
     setScore(0)
-    setIsCompleted(false)
+    setAnswers({})
+    setCorrectStatus({})
+    setSessionId(null)
+    setQuestions([])
   }
 
-  const isCorrectAnswer = (letter: string) => {
-    if (!currentQuestion) return false
-    return currentQuestion.options.find(o => o.letter === letter)?.isCorrect
-  }
+  const currentQuestion = questions[currentIndex]
+  const totalQuestions = questions.length
+  const progressPercent = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0
+  const scorePercentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0
 
-  const getOptionStatusClass = (letter: string) => {
-    if (!selectedAnswer) return ''
-    if (letter === selectedAnswer) {
-      return isCorrectAnswer(letter) ? 'correct' : 'wrong'
-    }
-    // Highlight correct answer if wrong was selected
-    if (isCorrectAnswer(letter)) return 'correct'
-    
-    // Dim others
-    return 'dimmed'
-  }
+  const isAnswerCorrect = selectedAnswer ? correctStatus[currentQuestion?.id] : null
 
-  // If no questions in topic
-  if (totalQuestions === 0) {
+  // ========== SCREEN: TOPIC SELECTION ==========
+  if (currentScreen === 'topic-selection') {
     return (
       <div className="page-wrapper">
         <div className="page-header">
           <h1>Quiz Triết học</h1>
-          <p className="subtitle">Kiểm tra kiến thức và học hỏi thêm mỗi ngày</p>
+          <p className="subtitle">Chọn chủ đề để bắt đầu</p>
         </div>
-        <div className="quiz-layout">
-          <div className="topic-selector">
-            {topics.map(topic => (
-              <button 
-                key={topic.id}
-                className={`topic-btn ${activeTopic === topic.id ? 'active' : ''}`}
-                onClick={() => handleTopicChange(topic.id)}
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', maxWidth: '900px', margin: '40px auto', padding: '0 16px' }}>
+          {topics.map(topic => {
+            const icon = topicIcons[topic] || '📖'
+            
+            return (
+              <button
+                key={topic}
+                onClick={() => handleTopicSelect(topic)}
+                style={{
+                  padding: '24px 16px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  background: 'var(--bg-primary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  color: 'var(--text-main)'
+                }}
+                onMouseOver={(e) => {
+                  const btn = e.currentTarget
+                  btn.style.borderColor = 'var(--mint-green)'
+                  btn.style.background = 'var(--bg-secondary)'
+                }}
+                onMouseOut={(e) => {
+                  const btn = e.currentTarget
+                  btn.style.borderColor = 'var(--border)'
+                  btn.style.background = 'var(--bg-primary)'
+                }}
               >
-                {topic.icon} {topic.id}
+                <div style={{ fontSize: '2.5rem' }}>{icon}</div>
+                <div>{topic}</div>
               </button>
-            ))}
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // ========== SCREEN: QUESTION COUNT SELECTOR ==========
+  if (currentScreen === 'question-count') {
+    return (
+      <div className="page-wrapper">
+        <div className="page-header">
+          <h1>Chọn số lượng câu hỏi</h1>
+          <p className="subtitle">Chủ đề: <strong>{selectedTopic}</strong></p>
+        </div>
+        
+        <div style={{ maxWidth: '500px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '24px', padding: '0 16px' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px' }}>
+            <label style={{ display: 'block', marginBottom: '16px', fontWeight: 600, fontSize: '1rem' }}>
+              📝 Số lượng câu hỏi
+            </label>
+            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--mint-green)', marginBottom: '16px', textAlign: 'center' }}>
+              {questionsCount}
+            </div>
+            <input 
+              type="range" 
+              min="1" 
+              max="50" 
+              value={questionsCount}
+              onChange={(e) => setQuestionsCount(parseInt(e.target.value))}
+              style={{ width: '100%', cursor: 'pointer', height: '6px' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '12px' }}>
+              <span>1</span>
+              <span>50</span>
+            </div>
           </div>
-          <div className="question-card" style={{ textAlign: 'center', padding: '40px' }}>
-            <h3>Chưa có câu hỏi cho chủ đề này!</h3>
-            <p style={{ color: 'var(--text-secondary)' }}>Vui lòng chọn chủ đề khác.</p>
+
+          <div style={{ background: 'var(--pastel-blue-light)', padding: '16px', borderRadius: '12px', borderLeft: '4px solid var(--pastel-blue-dark)' }}>
+            <p style={{ margin: '0', fontSize: '0.9rem', color: 'var(--text-main)' }}>
+              💡 <strong>Ghi chú:</strong> Hệ thống sẽ chỉ hiển thị những câu hỏi bạn trả lời sai trước đó + các câu mới. Những câu đã trả lời đúng sẽ không hiển thị lại.
+            </p>
+          </div>
+          
+          <button 
+            className="btn btn-primary"
+            onClick={handleStartQuiz}
+            disabled={loading}
+            style={{ padding: '14px', fontSize: '1rem', fontWeight: 600 }}
+          >
+            {loading ? '⏳ Đang tải...' : '▶️ Bắt đầu Quiz'}
+          </button>
+          
+          <button 
+            onClick={() => setCurrentScreen('topic-selection')}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '8px', fontSize: '0.95rem', textDecoration: 'underline' }}
+          >
+            ← Quay lại chọn chủ đề
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ========== SCREEN: QUIZ ==========
+  if (currentScreen === 'quiz' && currentQuestion) {
+    const optionsObj = currentQuestion.options as any
+    const optionLetters = ['A', 'B', 'C', 'D']
+    
+    return (
+      <div className="page-wrapper">
+        <div className="page-header">
+          <h1>Quiz Triết học</h1>
+          <p className="subtitle">{selectedTopic}</p>
+        </div>
+        
+        <div className="quiz-layout">
+          <div className="progress-container">
+            <div className="progress-text">Câu {currentIndex + 1}/{totalQuestions}</div>
+            <div className="progress-bar-bg">
+              <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }}></div>
+            </div>
+          </div>
+          
+          <div className="question-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--pastel-blue-dark)', background: 'var(--pastel-blue-light)', padding: '4px 12px', borderRadius: '20px' }}>
+                {selectedTopic}
+              </span>
+            </div>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.4, marginBottom: '24px', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              {currentQuestion.question}
+            </h3>
+            
+            <div className="answer-options">
+              {optionLetters.map(letter => {
+                const option = optionsObj[letter]
+                if (!option) return null
+                
+                let statusClass = ''
+                if (selectedAnswer) {
+                  if (letter === selectedAnswer) {
+                    statusClass = option.isCorrect ? 'correct' : 'wrong'
+                  } else if (option.isCorrect) {
+                    statusClass = 'correct'
+                  } else {
+                    statusClass = 'dimmed'
+                  }
+                }
+                
+                return (
+                  <button 
+                    key={letter}
+                    className={`answer-btn ${statusClass}`}
+                    onClick={() => handleAnswerClick(letter)}
+                    disabled={!!selectedAnswer}
+                    style={{ opacity: selectedAnswer && statusClass === 'dimmed' ? 0.5 : 1 }}
+                  >
+                    <span className="opt-letter">{letter}</span> {option.text}
+                  </button>
+                )
+              })}
+            </div>
+            
+            {selectedAnswer && (
+              <div className={`feedback-card ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
+                <div className="feedback-header">
+                  {isAnswerCorrect ? (
+                    <CheckCircle weight="fill" color="#4CAF50" />
+                  ) : (
+                    <XCircle weight="fill" color="#F44336" />
+                  )}
+                  <span className={`feedback-title ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
+                    {isAnswerCorrect ? 'Chính xác! 🎉' : 'Chưa đúng rồi!'}
+                  </span>
+                </div>
+                <p className="feedback-desc">
+                  {currentQuestion.explanation}
+                </p>
+                <button className="btn btn-primary mt-3" onClick={handleNextQuestion}>
+                  {currentIndex + 1 === totalQuestions ? 'Xem kết quả' : 'Câu tiếp theo'} <ArrowRight />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
     )
   }
 
-  const isAnswerCorrect = selectedAnswer ? isCorrectAnswer(selectedAnswer) : null
-  const progressPercent = ((currentIndex) / totalQuestions) * 100
-
-  return (
-    <div className="page-wrapper">
-      <div className="page-header">
-        <h1>Quiz Triết học</h1>
-        <p className="subtitle">Kiểm tra kiến thức và học hỏi thêm mỗi ngày</p>
-      </div>
-      
-      <div className="quiz-layout">
-        <div className="topic-selector">
-          {topics.map(topic => (
-            <button 
-              key={topic.id}
-              className={`topic-btn ${activeTopic === topic.id ? 'active' : ''}`}
-              onClick={() => handleTopicChange(topic.id)}
-            >
-              {topic.icon} {topic.id}
-            </button>
-          ))}
+  // ========== SCREEN: RESULTS ==========
+  if (currentScreen === 'results') {
+    const correctCount = score
+    const wrongCount = totalQuestions - score
+    
+    return (
+      <div className="page-wrapper">
+        <div className="page-header">
+          <h1>Kết quả Quiz</h1>
+          <p className="subtitle">{selectedTopic}</p>
         </div>
         
-        {isCompleted ? (
+        <div style={{ maxWidth: '500px', margin: '40px auto' }}>
           <div className="question-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
             <div style={{ fontSize: '4rem', marginBottom: '16px' }}>
-              {score === totalQuestions ? '🏆' : score > totalQuestions / 2 ? '🌟' : '📚'}
+              {scorePercentage === 100 ? '🏆' : scorePercentage >= 80 ? '🌟' : scorePercentage >= 60 ? '👍' : '📚'}
             </div>
             <h2 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Hoàn thành Quiz!</h2>
             <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-              Bạn trả lời đúng <strong>{score}/{totalQuestions}</strong> câu hỏi.
+              Bạn trả lời đúng <strong>{correctCount}/{totalQuestions}</strong> câu hỏi.
             </p>
-            <button className="btn btn-primary" onClick={restartQuiz} style={{ maxWidth: '200px', margin: '0 auto' }}>
-              <ArrowCounterClockwise weight="bold" /> Làm lại
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="progress-container">
-              <div className="progress-text">Câu {currentIndex + 1}/{totalQuestions}</div>
-              <div className="progress-bar-bg">
-                <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }}></div>
+            
+            <div style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
+              <h3 style={{ fontSize: '3rem', color: 'var(--mint-green)', margin: '0 0 8px 0' }}>
+                {scorePercentage}%
+              </h3>
+              <p style={{ margin: '0 0 16px 0', color: 'var(--text-secondary)' }}>Tỷ lệ thành công</p>
+              
+              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: '#4CAF50', fontSize: '1.5rem', fontWeight: 'bold' }}>{correctCount}</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>✓ Đúng</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: '#F44336', fontSize: '1.5rem', fontWeight: 'bold' }}>{wrongCount}</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>✗ Sai</div>
+                </div>
               </div>
             </div>
             
-            <div className="question-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--pastel-blue-dark)', background: 'var(--pastel-blue-light)', padding: '4px 12px', borderRadius: '20px' }}>
-                  {currentQuestion.topic}
-                </span>
-              </div>
-              <h3 style={{ fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.4, marginBottom: '24px', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{currentQuestion.question}</h3>
-              
-              <div className="answer-options">
-                {currentQuestion.options.map(opt => (
-                  <button 
-                    key={opt.letter}
-                    className={`answer-btn ${getOptionStatusClass(opt.letter)}`}
-                    onClick={() => handleAnswerClick(opt.letter)}
-                    style={{ opacity: selectedAnswer && !isCorrectAnswer(opt.letter) && opt.letter !== selectedAnswer ? 0.5 : 1 }}
-                  >
-                    <span className="opt-letter">{opt.letter}</span> {opt.text}
-                  </button>
-                ))}
-              </div>
-              
-              {selectedAnswer && (
-                <div className={`feedback-card ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
-                  <div className="feedback-header">
-                    {isAnswerCorrect ? (
-                      <CheckCircle weight="fill" color="#4CAF50" />
-                    ) : (
-                      <XCircle weight="fill" color="#F44336" />
-                    )}
-                    <span className={`feedback-title ${isAnswerCorrect ? 'correct' : 'wrong'}`}>
-                      {isAnswerCorrect ? 'Chính xác! 🎉' : 'Chưa đúng rồi!'}
-                    </span>
-                  </div>
-                  <p className="feedback-desc">
-                    {currentQuestion.explanation}
-                  </p>
-                  <button className="btn btn-primary mt-3" onClick={handleNextQuestion}>
-                    {currentIndex + 1 === totalQuestions ? 'Xem kết quả' : 'Câu tiếp theo'} <ArrowRight />
-                  </button>
-                </div>
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button 
+                className="btn btn-primary"
+                onClick={handleRetry}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                <ArrowCounterClockwise weight="bold" /> Làm lại
+              </button>
+              <button 
+                className="btn btn-secondary"
+                onClick={handleRetry}
+                style={{ padding: '12px' }}
+              >
+                ← Quay lại chủ đề
+              </button>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
+
+  return null
 }
