@@ -568,6 +568,48 @@ export async function fetchQuizHistory(userId: string | null, topic?: string): P
   return []
 }
 
+export async function fetchQuizHistoryPaged(
+  userId: string | null,
+  opts: { search?: string; page?: number; pageSize?: number; topic?: string } = {}
+): Promise<{ items: QuizSession[]; total: number }> {
+  const pageSize = Math.max(1, opts.pageSize ?? 6)
+  const page = Math.max(1, opts.page ?? 1)
+  const start = (page - 1) * pageSize
+  const end = start + pageSize - 1
+  const search = (opts.search ?? '').trim()
+
+  if (supabase && userId) {
+    try {
+      let query = supabase
+        .from('quiz_sessions')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+
+      if (opts.topic && opts.topic !== 'Tất cả') {
+        query = query.eq('topic', opts.topic)
+      }
+      if (search) {
+        query = query.ilike('topic', `%${search}%`)
+      }
+
+      const { data, error, count } = await query.range(start, end)
+      if (error) throw error
+      return { items: (data ?? []) as QuizSession[], total: count ?? (data?.length ?? 0) }
+    } catch (err) {
+      console.error('Error fetching paged quiz history:', err)
+    }
+  }
+
+  // Guest/local fallback
+  const all = await fetchQuizHistory(userId, opts.topic)
+  const filtered = search
+    ? all.filter(s => (s.topic ?? '').toLowerCase().includes(search.toLowerCase()))
+    : all
+  return { items: filtered.slice(start, end + 1), total: filtered.length }
+}
+
 // Fetch all responses recorded during a single quiz session
 export async function fetchSessionResponses(sessionId: string, userId?: string | null): Promise<QuizResponse[]> {
   if (supabase && userId && !sessionId.startsWith('local_')) {

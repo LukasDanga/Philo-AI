@@ -64,11 +64,11 @@ export default function ProfilePage() {
   ]
 
   const philosophers = [
-    { id: 1, name: 'Socrates', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Socrates_Louvre.jpg/220px-Socrates_Louvre.jpg' },
-    { id: 2, name: 'Nietzsche', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Nietzsche187a.jpg/220px-Nietzsche187a.jpg' },
-    { id: 3, name: 'Lão Tử', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Laozi.jpg/220px-Laozi.jpg' },
-    { id: 4, name: 'Plato', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Plato_Silanion_Musei_Capitolini_MC1377.jpg/220px-Plato_Silanion_Musei_Capitolini_MC1377.jpg' },
-    { id: 5, name: 'Đức Phật', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Buddha_in_Sarnath_Museum_%28Dhammajak_Mutra%29.jpg/220px-Buddha_in_Sarnath_Museum_%28Dhammajak_Mutra%29.jpg' },
+    { id: 1, name: 'Socrates', img: 'https://upload.wikimedia.org/wikipedia/commons/a/a4/Socrates_Louvre.jpg' },
+    { id: 2, name: 'Nietzsche', img: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Nietzsche187a.jpg' },
+    { id: 3, name: 'Lão Tử', img: 'https://ui-avatars.com/api/?name=Lao+Tzu&background=random&size=120&font-size=0.5' },
+    { id: 4, name: 'Plato', img: 'https://upload.wikimedia.org/wikipedia/commons/8/88/Plato_Silanion_Musei_Capitolini_MC1377.jpg' },
+    { id: 5, name: 'Đức Phật', img: 'https://ui-avatars.com/api/?name=Buddha&background=random&size=120&font-size=0.5' },
   ]
 
   return (
@@ -120,7 +120,7 @@ export default function ProfilePage() {
             ) : (
               <>
                 <h2>{profile.name}</h2>
-                <p className="bio">{profile.bio}</p>
+                <p className="bio">{profile.bio?.trim() ? profile.bio : 'Người dùng này chưa chỉnh bio'}</p>
                 {userEmail && (
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>📧 {userEmail}</p>
                 )}

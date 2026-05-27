@@ -1,6 +1,6 @@
 // src/pages/ExplorePage.tsx
 import { useState, useEffect } from 'react'
-import { Clock, Quotes, YoutubeLogo, Article, Sparkle, ArrowRight } from '@phosphor-icons/react'
+import { Clock, Quotes, YoutubeLogo, Article } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 
 interface Quote {
@@ -20,13 +20,35 @@ interface FeedItem {
 export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState<'article' | 'video'>('article');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 6;
   const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // Filter feed based on active tab
-  const filteredItems = feed.filter(item => item.type === activeTab);
-  const totalPages = Math.min(2, Math.ceil(filteredItems.length / itemsPerPage));
+  // Filter feed based on active tab, search, and category
+  const filteredItems = feed
+    .filter(item => item.type === activeTab)
+    .filter(item => {
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return item.title.toLowerCase().includes(query) || item.desc.toLowerCase().includes(query);
+      }
+      return true;
+    })
+    .filter(item => {
+      if (selectedCategory === 'all') return true;
+      // Simple category filter based on title keywords
+      const categoryKeywords: Record<string, string[]> = {
+        'stoicism': ['stoic', 'stoicism', 'marcus aurelius', 'seneca', 'epictetus'],
+        'existentialism': ['nietzsche', 'sartre', 'camus', 'existential', 'kierkegaard'],
+        'eastern': ['lão tử', 'laozi', 'đức phật', 'buddha', 'confucius', 'khổng tử'],
+        'classical': ['plato', 'socrates', 'aristotle', 'socrates'],
+      };
+      const keywords = categoryKeywords[selectedCategory] || [];
+      const titleLower = item.title.toLowerCase();
+      return keywords.some(keyword => titleLower.includes(keyword));
+    });
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Tab button component
@@ -115,7 +137,12 @@ export default function ExplorePage() {
   // -------------------------------------------------------------------
   useEffect(() => {
     const fetchWikiArticles = async (): Promise<FeedItem[]> => {
-      const titles = ['Triết học', 'Stoicism', 'Plato', 'Nietzsche']
+      const titles = [
+        'Triết học', 'Stoicism', 'Plato', 'Nietzsche', 'Socrates', 
+        'Aristotle', 'Immanuel Kant', 'Jean-Paul Sartre', 'Albert Camus',
+        'Lão Tử', 'Đức Phật', 'Khổng Tử', 'Mencius', 'Chu Tử',
+        'René Descartes', 'David Hume', 'John Locke', 'Baruch Spinoza'
+      ]
       const results: FeedItem[] = []
       for (const title of titles) {
         try {
@@ -123,7 +150,7 @@ export default function ExplorePage() {
           if (!resp.ok) continue
           const data = await resp.json()
           results.push({
-            id: Date.now() + Math.random(),
+            id: String(Date.now() + Math.random()),
             title: data.title,
             desc: data.extract?.slice(0, 120) + '…',
             readTime: `${Math.ceil((data.extract?.length || 0) / 200)} phút đọc`,
@@ -137,36 +164,31 @@ export default function ExplorePage() {
     }
 
     const fetchYouTubeVideos = async (): Promise<FeedItem[]> => {
-      const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY
-      if (!apiKey) return []
-      const query = encodeURIComponent('triết học')
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&type=video&q=${query}&key=${apiKey}`
-      try {
-        const resp = await fetch(url)
-        if (!resp.ok) return []
-        const data = await resp.json()
-        return data.items.map((item: any) => ({
-          id: item.id.videoId,
-          title: item.snippet.title,
-          desc: item.snippet.description.slice(0, 100) + '…',
-          readTime: `${Math.floor(Math.random() * 5) + 3} phút xem`,
-          type: 'video',
-        }))
-      } catch (e) {
-        console.error('YouTube fetch error', e)
-        return []
-      }
+      // Mock video data since YouTube API requires key
+      const mockVideos: FeedItem[] = [
+        { id: '1', title: 'Giới thiệu về Triết học Stoic', desc: 'Khám phá triết học Stoic và cách áp dụng vào cuộc sống hiện đại.', readTime: '12 phút xem', type: 'video' },
+        { id: '2', title: 'Nietzsche và Siêu nhân', desc: 'Phân tích khái niệm Übermensch của Nietzsche trong bối cảnh hiện đại.', readTime: '15 phút xem', type: 'video' },
+        { id: '3', title: 'Đạo Đức Kinh và Triết học Nho giáo', desc: 'Tìm hiểu về đạo đức và nhân sinh quan của Khổng Tử.', readTime: '18 phút xem', type: 'video' },
+        { id: '4', title: 'Socrates và Phương pháp Duy vấn', desc: 'Cách Socrates sử dụng câu hỏi để tìm ra chân lý.', readTime: '10 phút xem', type: 'video' },
+        { id: '5', title: 'Triết học Phật giáo', desc: 'Những nguyên lý cơ bản của triết học Phật giáo và sự giác ngộ.', readTime: '20 phút xem', type: 'video' },
+        { id: '6', title: 'Plato và Thế giới Ý niệm', desc: 'Lý thuyết về thế giới ý niệm của Plato và hầm ẩn dụ.', readTime: '14 phút xem', type: 'video' },
+        { id: '7', title: 'Aristotle và Luật Nhân Quả', desc: 'Khái niệm về nhân quả và lý tính trong triết học Aristotle.', readTime: '16 phút xem', type: 'video' },
+        { id: '8', title: 'Triết học Hiện sinh', desc: 'Sartre, Camus và ý nghĩa của sự tồn tại.', readTime: '19 phút xem', type: 'video' },
+        { id: '9', title: 'Lão Tử và Đạo Đức Kinh', desc: 'Triết học Đạo giáo và khái niệm Vô vi.', readTime: '17 phút xem', type: 'video' },
+        { id: '10', title: 'Kant và Phán đoán Phân loại', desc: 'Triết học đạo đức của Immanuel Kant.', readTime: '22 phút xem', type: 'video' },
+        { id: '11', title: 'Descartes và Tôi tư duy nên tôi tồn tại', desc: 'Nền tảng của triết học hiện đại phương Tây.', readTime: '13 phút xem', type: 'video' },
+        { id: '12', title: 'Spinoza và Thuyết Nhất nguyên', desc: 'Triết học về Thượng đế và tự nhiên của Spinoza.', readTime: '21 phút xem', type: 'video' },
+      ]
+      return mockVideos
     }
 
     const loadFeed = async () => {
-      setIsLoadingFeed(true)
       const [wiki, yt] = await Promise.all([fetchWikiArticles(), fetchYouTubeVideos()])
       // Combine and randomize order, make first item featured
       const combined = [...wiki, ...yt]
       combined.sort(() => Math.random() - 0.5)
       if (combined.length) combined[0].featured = true
       setFeed(combined)
-      setIsLoadingFeed(false)
     }
     loadFeed()
   }, [])
@@ -211,6 +233,75 @@ export default function ExplorePage() {
           </div>
         </div>
 
+        {/* Search and Filter */}
+        <div style={{ marginBottom: '24px' }}>
+          <input
+            type="text"
+            placeholder="Tìm kiếm bài viết hoặc video..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              border: '1.5px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontSize: '1rem',
+              marginBottom: '16px',
+              background: 'var(--white)',
+            }}
+          />
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              className={`filter-btn ${selectedCategory === 'all' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedCategory('all');
+                setCurrentPage(1);
+              }}
+            >
+              Tất cả
+            </button>
+            <button
+              className={`filter-btn ${selectedCategory === 'stoicism' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedCategory('stoicism');
+                setCurrentPage(1);
+              }}
+            >
+              Stoicism
+            </button>
+            <button
+              className={`filter-btn ${selectedCategory === 'existentialism' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedCategory('existentialism');
+                setCurrentPage(1);
+              }}
+            >
+              Hiện sinh
+            </button>
+            <button
+              className={`filter-btn ${selectedCategory === 'eastern' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedCategory('eastern');
+                setCurrentPage(1);
+              }}
+            >
+              Phương Đông
+            </button>
+            <button
+              className={`filter-btn ${selectedCategory === 'classical' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedCategory('classical');
+                setCurrentPage(1);
+              }}
+            >
+              Cổ điển
+            </button>
+          </div>
+        </div>
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
           <TabButton label="Bài viết" value="article" />
@@ -219,20 +310,26 @@ export default function ExplorePage() {
 
         {/* Cards Grid */}
         <div className="explore-grid" style={{ padding: 0 }}>
-          {paginatedItems.map(item => {
-            const link =
-              item.type === 'article'
-                ? `https://vi.wikipedia.org/wiki/${encodeURIComponent(item.title)}`
-                : `https://www.youtube.com/watch?v=${item.id}`;
-            return (
-              <a
-                key={item.id}
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`explore-card ${item.featured ? 'featured' : ''}`}
-                style={{ display: 'flex', flexDirection: 'column' }}
-              >
+          {paginatedItems.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+              Không tìm thấy kết quả nào
+            </div>
+          ) : (
+            paginatedItems.map(item => {
+              return (
+                <div
+                  key={item.id}
+                  className={`explore-card ${item.featured ? 'featured' : ''}`}
+                  style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+                  onClick={() => {
+                    if (item.type === 'article') {
+                      // Navigate to article detail page or show modal
+                      navigate(`/article/${encodeURIComponent(item.title)}`);
+                    } else {
+                      window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(item.title)}`, '_blank');
+                    }
+                  }}
+                >
                 <div
                   style={{
                     display: 'flex',
@@ -281,12 +378,13 @@ export default function ExplorePage() {
                 >
                   {item.desc}
                 </p>
-                <span className="explore-meta" style={{ marginTop: 'auto', fontWeight: 500 }}>
-                  <Clock size={16} /> {item.readTime}
-                </span>
-              </a>
-            );
-          })}
+                  <span className="explore-meta" style={{ marginTop: 'auto', fontWeight: 500 }}>
+                    <Clock size={16} /> {item.readTime}
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Pagination */}
@@ -350,6 +448,25 @@ export default function ExplorePage() {
             font-size: 0.75rem;
             font-weight: 600;
             margin-bottom: 12px;
+          }
+          .filter-btn {
+            background: var(--white);
+            border: 1.5px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+          }
+          .filter-btn:hover {
+            background: var(--pastel-blue-light);
+            border-color: var(--pastel-blue);
+          }
+          .filter-btn.active {
+            background: var(--pastel-blue);
+            border-color: var(--pastel-blue);
+            color: #003366;
           }
         `}</style>
       </div>

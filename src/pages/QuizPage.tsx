@@ -21,7 +21,7 @@ import {
   recordAnswer, 
   completeQuizSession, 
   getTopicProgress, 
-  fetchQuizHistory, 
+  fetchQuizHistoryPaged, 
   fetchSessionResponses,
   type QuizQuestion, 
   type QuizSession, 
@@ -65,6 +65,17 @@ export default function QuizPage() {
   const [questionsCount, setQuestionsCount] = useState(10)
   const [topicStats, setTopicStats] = useState<Record<string, TopicProgress>>({})
   const [smartBreakdown, setSmartBreakdown] = useState<TopicProgress | null>(null)
+  
+  // Search & Pagination States
+  const [searchQuery, setSearchQuery] = useState('')
+  const [historySearchQuery, setHistorySearchQuery] = useState('')
+  const [topicsCurrentPage, setTopicsCurrentPage] = useState(1)
+  const [historyCurrentPage, setHistoryCurrentPage] = useState(1)
+  const topicsPerPage = 6
+  const historyPerPage = 6
+  const [historyTotalPages, setHistoryTotalPages] = useState(1)
+  const [historyTotalCount, setHistoryTotalCount] = useState(0)
+  const [historyAvgAccuracy, setHistoryAvgAccuracy] = useState(0)
   
   // Ongoing Quiz States
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -112,8 +123,26 @@ export default function QuizPage() {
       setTopicStats(statsMap)
       
       // Load history
-      const history = await fetchQuizHistory(uId)
-      setHistoryList(history)
+      const historyRes = await fetchQuizHistoryPaged(uId, { page: 1, pageSize: historyPerPage })
+      setHistoryList(historyRes.items)
+      setHistoryTotalPages(Math.max(1, Math.ceil(historyRes.total / historyPerPage)))
+      setHistoryTotalCount(historyRes.total)
+
+      // Load global history summary (count + avg accuracy)
+      if (supabase && uId) {
+        const { data: allSessions, error } = await supabase
+          .from('quiz_sessions')
+          .select('score,total_questions')
+          .eq('user_id', uId)
+          .eq('status', 'completed')
+        if (!error && allSessions) {
+          const n = allSessions.length
+          const avg = n > 0
+            ? Math.round(allSessions.reduce((acc: number, s: any) => acc + (s.total_questions > 0 ? (s.score / s.total_questions) * 100 : 0), 0) / n)
+            : 0
+          setHistoryAvgAccuracy(avg)
+        }
+      }
       
       setLoading(false)
     }
@@ -130,9 +159,27 @@ export default function QuizPage() {
     }
     setTopicStats(statsMap)
     
-    const history = await fetchQuizHistory(userId)
-    setHistoryList(history)
+    const historyRes = await fetchQuizHistoryPaged(userId, { page: historyCurrentPage, pageSize: historyPerPage, search: historySearchQuery })
+    setHistoryList(historyRes.items)
+    setHistoryTotalPages(Math.max(1, Math.ceil(historyRes.total / historyPerPage)))
+    setHistoryTotalCount(historyRes.total)
   }
+
+  // Server-side: history search & pagination
+  useEffect(() => {
+    const run = async () => {
+      if (!userId) return
+      const historyRes = await fetchQuizHistoryPaged(userId, {
+        page: historyCurrentPage,
+        pageSize: historyPerPage,
+        search: historySearchQuery
+      })
+      setHistoryList(historyRes.items)
+      setHistoryTotalPages(Math.max(1, Math.ceil(historyRes.total / historyPerPage)))
+      setHistoryTotalCount(historyRes.total)
+    }
+    run()
+  }, [userId, historyCurrentPage, historySearchQuery])
 
   // ========== ACTIONS & HANDLERS ==========
 
@@ -304,6 +351,20 @@ export default function QuizPage() {
   const scorePercentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0
   const isAnswerCorrect = selectedAnswer ? correctStatus[currentQuestion?.id] : null
 
+  // Filter topics based on search query
+  const filteredTopics = topics.filter(topic => 
+    topic.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+  
+  // Pagination for topics
+  const topicsTotalPages = Math.ceil(filteredTopics.length / topicsPerPage)
+  const paginatedTopics = filteredTopics.slice(
+    (topicsCurrentPage - 1) * topicsPerPage,
+    topicsCurrentPage * topicsPerPage
+  )
+  
+  const paginatedHistory = historyList
+  
   // Pre-calculate dashboard global statistics (unseen/completed ratios)
   const calculateGlobalStats = () => {
     let totalQuestionsAll = 0
@@ -328,11 +389,8 @@ export default function QuizPage() {
   }
   const globalStats = calculateGlobalStats()
 
-  // Pre-calculate total history statistics
-  const completedQuizzesCount = historyList.length
-  const avgHistoryAccuracy = completedQuizzesCount > 0 
-    ? Math.round(historyList.reduce((acc, curr) => acc + (curr.total_questions > 0 ? (curr.score / curr.total_questions) * 100 : 0), 0) / completedQuizzesCount)
-    : 0
+  const completedQuizzesCount = historyTotalCount
+  const avgHistoryAccuracy = historyAvgAccuracy
 
   // ==================== SCREEN RENDERS ====================
 
@@ -373,6 +431,27 @@ export default function QuizPage() {
 
           {activeTab === 'quiz' ? (
             <>
+              {/* Search input for topics */}
+              <div style={{ marginBottom: '24px' }}>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm chủ đề..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setTopicsCurrentPage(1)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '1rem',
+                    background: 'var(--white)',
+                  }}
+                />
+              </div>
+
               {/* Learning stats overview panel */}
               <div className="stats-overview">
                 <div className="stat-widget-box">
@@ -411,8 +490,9 @@ export default function QuizPage() {
                   ⏳ Đang tải dữ liệu học tập của bạn...
                 </div>
               ) : (
-                <div className="topic-grid">
-                  {topics.map(topic => {
+                <>
+                  <div className="topic-grid">
+                    {paginatedTopics.map(topic => {
                     const icon = topicIcons[topic] || '📖'
                     const color = topicColors[topic] || '#E5E5EA'
                     const stat = topicStats[topic] || { totalQuestions: 0, correctCount: 0, wrongCount: 0, unseenCount: 0, progressPercent: 0 }
@@ -466,25 +546,79 @@ export default function QuizPage() {
                       </div>
                     )
                   })}
-                </div>
+                  </div>
+                  
+                  {/* Pagination for topics */}
+                  {topicsTotalPages > 1 && (
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
+                      <button
+                        className="tab-btn"
+                        disabled={topicsCurrentPage === 1}
+                        onClick={() => setTopicsCurrentPage(p => Math.max(p - 1, 1))}
+                      >
+                        ← Trang trước
+                      </button>
+                      <span style={{ alignSelf: 'center', fontWeight: 600 }}>
+                        {topicsCurrentPage} / {topicsTotalPages}
+                      </span>
+                      <button
+                        className="tab-btn"
+                        disabled={topicsCurrentPage === topicsTotalPages}
+                        onClick={() => setTopicsCurrentPage(p => Math.min(p + 1, topicsTotalPages))}
+                      >
+                        Trang sau →
+                      </button>
+                    </div>
+                  )}
+                  
+                  {paginatedTopics.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                      Không tìm thấy chủ đề nào
+                    </div>
+                  )}
+                </>
               )}
             </>
           ) : (
             /* HISTORY TAB */
             <div>
+              {/* Search input for history */}
+              <div style={{ marginBottom: '24px' }}>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm lịch sử học tập..."
+                  value={historySearchQuery}
+                  onChange={(e) => {
+                    setHistorySearchQuery(e.target.value)
+                    setHistoryCurrentPage(1)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '1rem',
+                    background: 'var(--white)',
+                  }}
+                />
+              </div>
+
               <div className="fav-section" style={{ boxShadow: 'none', border: '1px solid var(--border)', borderRadius: '16px' }}>
                 <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
                   <Clock weight="fill" color="var(--pastel-blue-dark)" />
                   Nhật Ký Học Tập ({completedQuizzesCount} lượt hoàn thành)
                 </h3>
                 
-                {historyList.length === 0 ? (
+                {paginatedHistory.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px 12px', color: 'var(--text-secondary)' }}>
-                    📚 Bạn chưa thực hiện bài kiểm tra nào. Chọn chủ đề và học ngay hôm nay!
+                    {historyList.length === 0 
+                      ? '📚 Bạn chưa thực hiện bài kiểm tra nào. Chọn chủ đề và học ngay hôm nay!'
+                      : 'Không tìm thấy lịch sử học tập nào'}
                   </div>
                 ) : (
-                  <div className="history-list">
-                    {historyList.map(session => {
+                  <>
+                    <div className="history-list">
+                      {paginatedHistory.map(session => {
                       const scorePercent = session.total_questions > 0 ? Math.round((session.score / session.total_questions) * 100) : 0
                       
                       // Format time correctly with UTC offset (+7) fallback parsing
@@ -534,7 +668,31 @@ export default function QuizPage() {
                         </div>
                       )
                     })}
-                  </div>
+                    </div>
+                    
+                    {/* Pagination for history */}
+                    {historyTotalPages > 1 && (
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
+                        <button
+                          className="tab-btn"
+                          disabled={historyCurrentPage === 1}
+                          onClick={() => setHistoryCurrentPage(p => Math.max(p - 1, 1))}
+                        >
+                          ← Trang trước
+                        </button>
+                        <span style={{ alignSelf: 'center', fontWeight: 600 }}>
+                          {historyCurrentPage} / {historyTotalPages}
+                        </span>
+                        <button
+                          className="tab-btn"
+                          disabled={historyCurrentPage === historyTotalPages}
+                          onClick={() => setHistoryCurrentPage(p => Math.min(p + 1, historyTotalPages))}
+                        >
+                          Trang sau →
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

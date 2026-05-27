@@ -6,6 +6,7 @@ import LibraryPage from './pages/LibraryPage'
 import ExplorePage from './pages/ExplorePage'
 import ProfilePage from './pages/ProfilePage'
 import PersonalityTestPage from './pages/PersonalityTestPage'
+import ArticleDetailPage from './pages/ArticleDetailPage'
 import AppShell from './components/AppShell'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/article/:title" element={<ArticleDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/personality-test" element={<PersonalityTestPage />} />
       </Route>

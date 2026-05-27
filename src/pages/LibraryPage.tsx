@@ -42,11 +42,59 @@ const IconMap: Record<string, any> = {
   Planet
 }
 
+function normalizeSections(raw: unknown): Section[] | undefined {
+  if (raw == null) return undefined
+
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return undefined
+    }
+  }
+
+  const arr: unknown[] | undefined =
+    Array.isArray(parsed) ? parsed
+    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).sections)) ? (parsed as any).sections
+    : undefined
+
+  if (!arr) return undefined
+
+  return arr
+    .map((s: any): Section | null => {
+      if (!s || typeof s !== 'object') return null
+      const heading = typeof s.heading === 'string' ? s.heading : ''
+      const quote = typeof s.quote === 'string' ? s.quote : undefined
+
+      const rawContent = (s as any).content
+      const content =
+        Array.isArray(rawContent) ? rawContent.map((p) => (typeof p === 'string' ? p : String(p))).filter(Boolean)
+        : typeof rawContent === 'string' ? [rawContent].filter(Boolean)
+        : rawContent == null ? []
+        : [String(rawContent)]
+
+      return { heading, content, quote }
+    })
+    .filter((x): x is Section => Boolean(x && (x.heading || x.content.length)))
+}
+
 export default function LibraryPage() {
   const [libraryData, setLibraryData] = useState<LibraryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [activeBook, setActiveBook] = useState<Book | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Server-side lists (Supabase mode)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [books, setBooks] = useState<Book[]>([])
+  const [currentCategory, setCurrentCategory] = useState<Category | null>(null)
+  const [isListLoading, setIsListLoading] = useState(false)
+
+  const PAGE_SIZE = 6
 
   // GỌI API (GIẢ LẬP) TỪ DATABASE
   useEffect(() => {
@@ -54,29 +102,11 @@ export default function LibraryPage() {
         setIsLoading(true)
         try {
           if (supabase) {
-            // Lấy từ Supabase
-            const { data: cats, error: catError } = await supabase.from('categories').select('*')
-            const { data: booksArr, error: bookError } = await supabase.from('books').select('*')
-          
-          if (!catError && !bookError && cats && booksArr) {
-            // Chuyển đổi định dạng books table thành Object Record
-            const booksRecord: Record<string, Book[]> = {}
-            booksArr.forEach(b => {
-              if (!booksRecord[b.category_id]) booksRecord[b.category_id] = []
-              booksRecord[b.category_id].push({
-                ...b,
-                iconName: b.icon_name,
-                time: b.read_time
-              })
-            })
-            
-            setLibraryData({ 
-              categories: cats.map(c => ({...c, iconName: c.icon_name})), 
-              books: booksRecord 
-            })
+            // Supabase mode uses server-side pagination/search in a separate effect.
+            // Keep minimal non-null state so the page doesn't unmount on each keystroke.
+            setLibraryData({ categories: [], books: {} })
             return
           }
-        }
         
         // Fallback: Nếu chưa có Supabase hoặc lỗi, lấy từ file nội bộ
         const response = await fetch('/data/library.json')
@@ -92,9 +122,98 @@ export default function LibraryPage() {
     fetchLibraryData()
   }, [])
 
+  // Supabase: server-side search + pagination for list views
+  useEffect(() => {
+    const run = async () => {
+      if (!supabase) return
+      if (activeBook) return
+
+      setIsListLoading(true)
+      try {
+        const q = searchQuery.trim()
+        const start = (page - 1) * PAGE_SIZE
+        const end = start + PAGE_SIZE - 1
+
+        if (!activeCategory) {
+          let query = supabase
+            .from('categories')
+            .select('*', { count: 'exact' })
+            .order('title', { ascending: true })
+
+          if (q) {
+            query = query.ilike('title', `%${q}%`)
+          }
+
+          const { data, error, count } = await query.range(start, end)
+          if (error) throw error
+
+          const mapped: Category[] = (data ?? []).map((c: any) => ({
+            ...c,
+            desc: c.description ?? c.desc,
+            iconName: c.icon_name ?? c.iconName
+          }))
+
+          setCategories(mapped)
+          setBooks([])
+          setCurrentCategory(null)
+          setTotalPages(Math.max(1, Math.ceil(((count ?? mapped.length) || 0) / PAGE_SIZE)))
+        } else {
+          // Fetch current category header (single)
+          const { data: catRow } = await supabase
+            .from('categories')
+            .select('*')
+            .eq('id', activeCategory)
+            .maybeSingle()
+
+          if (catRow) {
+            setCurrentCategory({
+              ...catRow,
+              desc: (catRow as any).description ?? (catRow as any).desc,
+              iconName: (catRow as any).icon_name ?? (catRow as any).iconName
+            } as Category)
+          } else {
+            setCurrentCategory(null)
+          }
+
+          let bookQuery = supabase
+            .from('books')
+            .select('*', { count: 'exact' })
+            .eq('category_id', activeCategory)
+            .order('id', { ascending: true })
+
+          if (q) {
+            const esc = q.replace(/[%_,]/g, '\\$&')
+            bookQuery = bookQuery.or(`title.ilike.%${esc}%,author.ilike.%${esc}%,type.ilike.%${esc}%`)
+          }
+
+          const { data: rows, error, count } = await bookQuery.range(start, end)
+          if (error) throw error
+
+          const mappedBooks: Book[] = (rows ?? []).map((b: any) => ({
+            ...b,
+            time: b.read_time ?? b.time,
+            sections: normalizeSections(b.sections)
+          }))
+
+          setBooks(mappedBooks)
+          setCategories([])
+          setTotalPages(Math.max(1, Math.ceil(((count ?? mappedBooks.length) || 0) / PAGE_SIZE)))
+        }
+      } catch (e) {
+        console.error('Lỗi tải dữ liệu thư viện (Supabase):', e)
+      } finally {
+        setIsListLoading(false)
+      }
+    }
+
+    run()
+  }, [activeCategory, activeBook, page, searchQuery])
+
   const handleCategoryClick = (categoryId: string) => {
     setActiveCategory(categoryId)
     setActiveBook(null)
+    setSearchQuery('')
+    setPage(1)
   }
 
   const handleBookClick = (book: Book) => {
@@ -104,14 +223,18 @@ export default function LibraryPage() {
   const handleBackToCategories = () => {
     setActiveCategory(null)
     setActiveBook(null)
+    setSearchQuery('')
+    setPage(1)
   }
 
   const handleBackToBooksList = () => {
     setActiveBook(null)
+    setSearchQuery('')
+    setPage(1)
   }
 
-  // Chờ load dữ liệu
-  if (isLoading || !libraryData) {
+  // Chờ load dữ liệu lần đầu
+  if (!libraryData) {
     return (
       <div className="page-wrapper">
         <div className="page-header">
@@ -131,10 +254,33 @@ export default function LibraryPage() {
     )
   }
 
-  // Tìm thông tin danh mục hiện tại
-  const currentCatDetails = libraryData.categories.find(c => c.id === activeCategory)
-  // Lấy danh sách sách của danh mục hiện tại
-  const booksToDisplay = activeCategory ? libraryData.books[activeCategory] : []
+  const currentCatDetails = supabase
+    ? currentCategory
+    : libraryData.categories.find(c => c.id === activeCategory)
+
+  // Fallback (non-supabase): filter + paginate on FE
+  const query = searchQuery.trim().toLowerCase()
+  const fallbackCategories = !query
+    ? libraryData.categories
+    : libraryData.categories.filter((c) => (c.title ?? '').toLowerCase().includes(query))
+  const fallbackBooksAll = activeCategory ? (libraryData.books[activeCategory] ?? []) : []
+  const fallbackBooks = !query
+    ? fallbackBooksAll
+    : fallbackBooksAll.filter((b) => {
+        const haystack = `${b.title ?? ''} ${b.type ?? ''} ${b.author ?? ''}`.toLowerCase()
+        return haystack.includes(query)
+      })
+
+  const displayTotalPages = supabase
+    ? totalPages
+    : Math.max(1, Math.ceil(((!activeCategory && !activeBook ? fallbackCategories.length : fallbackBooks.length) || 0) / PAGE_SIZE))
+
+  const safePage = Math.min(page, displayTotalPages)
+  const startIndex = (safePage - 1) * PAGE_SIZE
+  const endIndex = startIndex + PAGE_SIZE
+
+  const displayCategories = supabase ? categories : fallbackCategories.slice(startIndex, endIndex)
+  const displayBooks = supabase ? books : fallbackBooks.slice(startIndex, endIndex)
 
   return (
     <div className="page-wrapper">
@@ -171,11 +317,42 @@ export default function LibraryPage() {
           </>
         )}
       </div>
+
+      {/* Search input (centered, like Quiz) */}
+      {(!activeBook) && (
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
+          <input
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+            placeholder={activeCategory ? 'Tìm theo chủ đề (tên sách / loại / tác giả)...' : 'Tìm theo tên chủ đề...'}
+            style={{
+              width: '100%',
+              maxWidth: '640px',
+              padding: '12px 16px',
+              border: '1.5px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontSize: '1rem',
+              background: 'var(--white)',
+              boxShadow: 'var(--shadow-sm)',
+              outline: 'none'
+            }}
+          />
+        </div>
+      )}
       
       {!activeCategory && !activeBook ? (
         // LEVEL 1: CATEGORY GRID VIEW
         <div className="library-grid">
-          {libraryData.categories.map(cat => {
+          {(isListLoading ? Array.from({ length: 6 }) : displayCategories).map((cat: any, idx: number) => {
+            if (isListLoading) {
+              return (
+                <div
+                  key={`sk_${idx}`}
+                  className="lib-card skeleton-pulse"
+                  style={{ height: '140px', background: 'var(--white)', borderTop: '4px solid var(--border)' }}
+                />
+              )
+            }
             const Icon = IconMap[cat.iconName] || BookOpen // Fallback icon
             return (
               <div 
@@ -195,7 +372,14 @@ export default function LibraryPage() {
       ) : activeCategory && !activeBook ? (
         // LEVEL 2: BOOK LIST VIEW
         <div className="explore-grid">
-          {booksToDisplay?.map(book => (
+          {(isListLoading ? Array.from({ length: 6 }) : displayBooks).map((book: any, idx: number) => (
+            isListLoading ? (
+              <div
+                key={`skb_${idx}`}
+                className="explore-card skeleton-pulse"
+                style={{ height: '220px', background: 'var(--white)', borderTop: '4px solid var(--border)' }}
+              />
+            ) : (
             <div 
               key={book.id} 
               onClick={() => handleBookClick(book)}
@@ -212,6 +396,7 @@ export default function LibraryPage() {
                 <Clock size={16} /> {book.time}
               </span>
             </div>
+            )
           ))}
         </div>
       ) : activeBook ? (
@@ -251,7 +436,9 @@ export default function LibraryPage() {
                 </h3>
                 
                 {/* Paragraphs */}
-                {section.content.map((paragraph, pIdx) => (
+                {(Array.isArray(section.content) ? section.content : [String((section as any)?.content ?? '')])
+                  .filter(Boolean)
+                  .map((paragraph, pIdx) => (
                   <p key={pIdx} style={{ fontSize: '0.88rem', lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: '16px', textAlign: 'justify' }}>
                     {pIdx === 0 && idx === 0 ? (
                       // Drop Cap
@@ -286,6 +473,29 @@ export default function LibraryPage() {
 
         </div>
       ) : null}
+
+      {/* Pagination at bottom (centered) */}
+      {!activeBook && displayTotalPages > 1 && (
+        <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center', paddingBottom: '30px' }}>
+          <button
+            className="tab-btn"
+            disabled={safePage === 1}
+            onClick={() => setPage(p => Math.max(p - 1, 1))}
+          >
+            ← Trang trước
+          </button>
+          <span style={{ alignSelf: 'center', fontWeight: 600 }}>
+            {safePage} / {displayTotalPages}
+          </span>
+          <button
+            className="tab-btn"
+            disabled={safePage === displayTotalPages}
+            onClick={() => setPage(p => Math.min(p + 1, displayTotalPages))}
+          >
+            Trang sau →
+          </button>
+        </div>
+      )}
 
       <style>{`
         .book-card-hover:hover {
