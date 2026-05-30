@@ -11,7 +11,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/explore'
+          redirectTo: window.location.origin + '/chat'
         }
       })
       if (error) throw error
