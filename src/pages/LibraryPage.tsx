@@ -81,7 +81,6 @@ function normalizeSections(raw: unknown): Section[] | undefined {
 
 export default function LibraryPage() {
   const [libraryData, setLibraryData] = useState<LibraryData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [activeBook, setActiveBook] = useState<Book | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -99,7 +98,6 @@ export default function LibraryPage() {
   // GỌI API (GIẢ LẬP) TỪ DATABASE
   useEffect(() => {
       const fetchLibraryData = async () => {
-        setIsLoading(true)
         try {
           if (supabase) {
             // Supabase mode uses server-side pagination/search in a separate effect.
@@ -114,8 +112,6 @@ export default function LibraryPage() {
         setLibraryData(data)
       } catch (error) {
         console.error("Lỗi tải dữ liệu thư viện:", error)
-      } finally {
-        setIsLoading(false)
       }
     }
 

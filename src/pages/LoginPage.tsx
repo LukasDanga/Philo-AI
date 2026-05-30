@@ -1,10 +1,7 @@
-import { useNavigate } from 'react-router-dom'
-import { BookOpen, Lightbulb, Columns, Tree, Brain, Sparkle, GoogleLogo, EnvelopeSimple } from '@phosphor-icons/react'
+import { BookOpen, Lightbulb, Columns, Tree, Brain, Sparkle, GoogleLogo } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
-  const navigate = useNavigate()
-
   const handleGoogleLogin = async () => {
     if (!supabase) {
       alert('Chưa cấu hình Supabase. Vui lòng kiểm tra file .env và khởi động lại.')
