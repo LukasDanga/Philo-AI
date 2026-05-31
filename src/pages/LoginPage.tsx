@@ -1,7 +1,10 @@
+import { useNavigate } from 'react-router-dom'
 import { BookOpen, Lightbulb, Columns, Tree, Brain, Sparkle, GoogleLogo } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
+  const navigate = useNavigate()
+
   const handleGoogleLogin = async () => {
     if (!supabase) {
       alert('Chưa cấu hình Supabase. Vui lòng kiểm tra file .env và khởi động lại.')
@@ -50,6 +53,31 @@ export default function LoginPage() {
               <GoogleLogo weight="fill" />
               Tiếp tục với Google
             </button>
+          </div>
+
+          {/* Banner Bài Test Tính Cách (moved from ExplorePage) */}
+          <div
+            onClick={() => navigate('/personality-test')}
+            style={{
+              background: 'linear-gradient(135deg, var(--white), var(--soft-yellow))',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px 24px',
+              marginTop: '24px',
+              marginBottom: '20px',
+              boxShadow: 'var(--shadow-md)',
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              border: '1px solid var(--border)',
+            }}
+            className="book-card-hover"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A5C00', fontWeight: 700, marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <Sparkle weight="fill" /> Bài trắc nghiệm mới
+            </div>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-main)', marginBottom: '8px', marginTop: 0 }}>Bạn mang tư tưởng của Triết gia nào?</h2>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem', lineHeight: 1.4 }}>
+              Khám phá trường phái triết học ẩn sâu bên trong tâm hồn bạn qua 5 câu hỏi tình huống.
+            </p>
           </div>
           
           <p className="login-footer">Bằng việc tiếp tục, bạn đồng ý với <a href="#">Điều khoản</a> và <a href="#">Chính sách</a> của chúng tôi.</p>

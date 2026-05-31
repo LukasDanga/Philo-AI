@@ -241,8 +241,19 @@ export async function fetchQuestions(
     if (topic !== 'Tất cả') {
       query = query.eq('topic', topic)
     }
-    
-    const { data: rawQuestions, error } = await query
+
+    const questionsPromise = query
+    const sessionsPromise = userId
+      ? supabase
+          .from('quiz_sessions')
+          .select('id')
+          .eq('user_id', userId)
+      : Promise.resolve({ data: [], error: null })
+
+    const [{ data: rawQuestions, error }, sessionsResult] = await Promise.all([
+      questionsPromise,
+      sessionsPromise
+    ])
     if (error) throw error
     
     if (!rawQuestions || rawQuestions.length === 0) {
@@ -260,11 +271,7 @@ export async function fetchQuestions(
     
     if (userId) {
       // User is logged in: query quiz_sessions first, then quiz_responses
-      const { data: sessions, error: sError } = await supabase
-        .from('quiz_sessions')
-        .select('id')
-        .eq('user_id', userId)
-      
+      const { data: sessions, error: sError } = sessionsResult
       if (!sError && sessions && sessions.length > 0) {
         const sessionIds = sessions.map(s => s.id)
         
@@ -657,75 +664,50 @@ export interface TopicProgress {
   bestScorePercent: number
 }
 
-export async function getTopicProgress(userId: string | null, topic: string): Promise<TopicProgress> {
+export async function getBatchTopicsProgress(
+  userId: string | null,
+  topicList: string[]
+): Promise<Record<string, TopicProgress>> {
   try {
-    let totalQuestions = 0
-    let questionsList: Array<{ id: number }> = []
+    let questionsList: Array<{ id: number; topic: string }> = []
     
-    // 1. Fetch questions list
+    // 1. Fetch all questions (id, topic)
     if (supabase) {
-      let query = supabase.from('questions').select('id')
-      if (topic !== 'Tất cả') {
-        query = query.eq('topic', topic)
-      }
-      const { data, error } = await query
-      if (!error && data) {
-        totalQuestions = data.length
-        questionsList = data
+      const { data: qData, error: qError } = await supabase
+        .from('questions')
+        .select('id, topic')
+      if (!qError && qData) {
+        questionsList = qData
       }
     }
     
-    if (totalQuestions === 0) {
-      let mockList = mockQuestionsData
-      if (topic !== 'Tất cả') {
-        mockList = mockList.filter(q => q.topic === topic)
-      }
-      totalQuestions = mockList.length
-      questionsList = mockList.map(q => ({ id: q.id }))
+    if (questionsList.length === 0) {
+      questionsList = mockQuestionsData.map(q => ({ id: q.id, topic: q.topic }))
     }
     
-    const questionIds = questionsList.map(q => q.id)
-    
-    // 2. Fetch response statuses
-    let correctIds: number[] = []
-    let incorrectIds: number[] = []
-    let attemptsCount = 0
-    let bestScorePercent = 0
+    // 2. Fetch all user's sessions & responses in parallel
+    let sessions: any[] = []
+    let responses: any[] = []
     
     if (supabase && userId) {
-      const { data: sessions, error: sError } = await supabase
+      // Fetch user's completed sessions
+      const { data: sData, error: sError } = await supabase
         .from('quiz_sessions')
-        .select('id, score, total_questions, status')
+        .select('id, topic, score, total_questions, status')
         .eq('user_id', userId)
-        .eq('topic', topic)
       
-      if (!sError && sessions) {
-        const completed = sessions.filter(s => s.status === 'completed')
-        attemptsCount = completed.length
-        if (completed.length > 0) {
-          const scores = completed.map(s => s.total_questions > 0 ? (s.score / s.total_questions) * 100 : 0)
-          bestScorePercent = Math.round(Math.max(...scores))
-        }
+      if (!sError && sData) {
+        sessions = sData
+        const sessionIds = sData.map(s => s.id)
         
-        const sessionIds = sessions.map(s => s.id)
         if (sessionIds.length > 0) {
-          const { data: responses, error: rError } = await supabase
+          const { data: rData, error: rError } = await supabase
             .from('quiz_responses')
-            .select('question_id, is_correct')
+            .select('question_id, is_correct, session_id')
             .in('session_id', sessionIds)
           
-          if (!rError && responses) {
-            const correctSet = new Set<number>()
-            const incorrectSet = new Set<number>()
-            
-            responses.forEach(r => {
-              if (r.is_correct) correctSet.add(r.question_id)
-              else incorrectSet.add(r.question_id)
-            });
-            correctSet.forEach(id => incorrectSet.delete(id))
-            
-            correctIds = Array.from(correctSet).filter(id => questionIds.includes(id))
-            incorrectIds = Array.from(incorrectSet).filter(id => questionIds.includes(id))
+          if (!rError && rData) {
+            responses = rData
           }
         }
       }
@@ -737,60 +719,114 @@ export async function getTopicProgress(userId: string | null, topic: string): Pr
         
         const storedSessions = localStorage.getItem(keySes)
         if (storedSessions) {
-          const sessions = JSON.parse(storedSessions) as any[]
-          const filtered = sessions.filter(s => s.topic === topic && s.status === 'completed')
-          attemptsCount = filtered.length
-          if (filtered.length > 0) {
-            const scores = filtered.map(s => s.total_questions > 0 ? (s.score / s.total_questions) * 100 : 0)
-            bestScorePercent = Math.round(Math.max(...scores))
-          }
+          sessions = JSON.parse(storedSessions) || []
         }
         
         const storedResponses = localStorage.getItem(keyResp)
         if (storedResponses) {
-          const responses = JSON.parse(storedResponses) as any[]
-          const correctSet = new Set<number>()
-          const incorrectSet = new Set<number>()
-          
-          responses.forEach(r => {
-            if (r.is_correct) correctSet.add(r.question_id)
-            else incorrectSet.add(r.question_id)
-          });
-          correctSet.forEach(id => incorrectSet.delete(id))
-          
-          correctIds = Array.from(correctSet).filter(id => questionIds.includes(id))
-          incorrectIds = Array.from(incorrectSet).filter(id => questionIds.includes(id))
+          responses = JSON.parse(storedResponses) || []
         }
       } catch (e) {
         console.error('Error calculating guest progress stats:', e)
       }
     }
     
-    const correctCount = correctIds.length
-    const wrongCount = incorrectIds.length
-    const unseenCount = Math.max(0, totalQuestions - correctCount - wrongCount)
-    const progressPercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
+    // 3. Compute correct and incorrect question sets
+    const correctSet = new Set<number>()
+    const incorrectSet = new Set<number>()
     
-    return {
-      totalQuestions,
-      correctCount,
-      wrongCount,
-      unseenCount,
-      progressPercent,
-      attemptsCount,
-      bestScorePercent
-    }
+    responses.forEach(r => {
+      if (r.is_correct) {
+        correctSet.add(r.question_id)
+      } else {
+        incorrectSet.add(r.question_id)
+      }
+    })
+    // A question is correct if answered correctly at least once, so remove from incorrect set if ever correct
+    correctSet.forEach(id => incorrectSet.delete(id))
+    
+    // 4. Group questions and sessions by topic
+    const questionsByTopic: Record<string, number[]> = { 'Tất cả': [] }
+    questionsList.forEach(q => {
+      if (!questionsByTopic[q.topic]) {
+        questionsByTopic[q.topic] = []
+      }
+      questionsByTopic[q.topic].push(q.id)
+      questionsByTopic['Tất cả'].push(q.id)
+    })
+    
+    const sessionsByTopic: Record<string, any[]> = { 'Tất cả': [] }
+    sessions.forEach(s => {
+      if (!sessionsByTopic[s.topic]) {
+        sessionsByTopic[s.topic] = []
+      }
+      sessionsByTopic[s.topic].push(s)
+      sessionsByTopic['Tất cả'].push(s)
+    })
+    
+    // 5. Build results for each topic in topicList
+    const result: Record<string, TopicProgress> = {}
+    
+    topicList.forEach(topic => {
+      const qIds = questionsByTopic[topic] || []
+      const totalQuestions = qIds.length
+      
+      const correctCount = qIds.filter(id => correctSet.has(id)).length
+      const wrongCount = qIds.filter(id => incorrectSet.has(id)).length
+      const unseenCount = Math.max(0, totalQuestions - correctCount - wrongCount)
+      const progressPercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
+      
+      const topicSessions = sessionsByTopic[topic] || []
+      const completed = topicSessions.filter(s => s.status === 'completed')
+      const attemptsCount = completed.length
+      
+      let bestScorePercent = 0
+      if (completed.length > 0) {
+        const scores = completed.map(s => s.total_questions > 0 ? (s.score / s.total_questions) * 100 : 0)
+        bestScorePercent = Math.round(Math.max(...scores))
+      }
+      
+      result[topic] = {
+        totalQuestions,
+        correctCount,
+        wrongCount,
+        unseenCount,
+        progressPercent,
+        attemptsCount,
+        bestScorePercent
+      }
+    })
+    
+    return result
   } catch (err) {
-    console.error('Error calculating progress:', err)
-    return {
-      totalQuestions: 0,
-      correctCount: 0,
-      wrongCount: 0,
-      unseenCount: 0,
-      progressPercent: 0,
-      attemptsCount: 0,
-      bestScorePercent: 0
-    }
+    console.error('Error in getBatchTopicsProgress:', err)
+    // Fallback: return default empty stats for each topic
+    const result: Record<string, TopicProgress> = {}
+    topicList.forEach(topic => {
+      result[topic] = {
+        totalQuestions: 0,
+        correctCount: 0,
+        wrongCount: 0,
+        unseenCount: 0,
+        progressPercent: 0,
+        attemptsCount: 0,
+        bestScorePercent: 0
+      }
+    })
+    return result
+  }
+}
+
+export async function getTopicProgress(userId: string | null, topic: string): Promise<TopicProgress> {
+  const batch = await getBatchTopicsProgress(userId, [topic])
+  return batch[topic] || {
+    totalQuestions: 0,
+    correctCount: 0,
+    wrongCount: 0,
+    unseenCount: 0,
+    progressPercent: 0,
+    attemptsCount: 0,
+    bestScorePercent: 0
   }
 }
 

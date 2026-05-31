@@ -98,6 +98,13 @@ export default function QuizPage() {
   // Retake Wrong Only Flag
   const [isRetakingWrong, setIsRetakingWrong] = useState(false)
 
+  const buildTopicStatsMap = async (topicList: string[], currentUserId: string | null) => {
+    const entries = await Promise.all(
+      topicList.map(async (topic) => [topic, await getTopicProgress(currentUserId, topic)] as const)
+    )
+    return Object.fromEntries(entries) as Record<string, TopicProgress>
+  }
+
   // Initialize: Load user info, topics, and overall progress stats
   useEffect(() => {
     const init = async () => {
@@ -112,18 +119,18 @@ export default function QuizPage() {
         }
       }
       
-      const topicList = await fetchTopics()
+      const [topicList, historyRes] = await Promise.all([
+        fetchTopics(),
+        fetchQuizHistoryPaged(uId, { page: 1, pageSize: historyPerPage })
+      ])
+
       setTopics(topicList)
-      
-      // Load stats for all topics
-      const statsMap: Record<string, TopicProgress> = {}
-      for (const topic of topicList) {
-        statsMap[topic] = await getTopicProgress(uId, topic)
-      }
+
+      // Load stats for all topics in parallel
+      const statsMap = await buildTopicStatsMap(topicList, uId)
       setTopicStats(statsMap)
-      
+
       // Load history
-      const historyRes = await fetchQuizHistoryPaged(uId, { page: 1, pageSize: historyPerPage })
       setHistoryList(historyRes.items)
       setHistoryTotalPages(Math.max(1, Math.ceil(historyRes.total / historyPerPage)))
       setHistoryTotalCount(historyRes.total)
@@ -153,10 +160,7 @@ export default function QuizPage() {
   // Refreshes dashboard statistics and history list
   const refreshStats = async () => {
     const topicList = await fetchTopics()
-    const statsMap: Record<string, TopicProgress> = {}
-    for (const topic of topicList) {
-      statsMap[topic] = await getTopicProgress(userId, topic)
-    }
+    const statsMap = await buildTopicStatsMap(topicList, userId)
     setTopicStats(statsMap)
     
     const historyRes = await fetchQuizHistoryPaged(userId, { page: historyCurrentPage, pageSize: historyPerPage, search: historySearchQuery })

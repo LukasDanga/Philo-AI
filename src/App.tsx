@@ -13,6 +13,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<LoginPage />} />
+      <Route path="/personality-test" element={<PersonalityTestPage />} />
       <Route element={<AppShell />}>
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
@@ -21,7 +22,6 @@ function App() {
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/article/:title" element={<ArticleDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/personality-test" element={<PersonalityTestPage />} />
       </Route>
     </Routes>
   )
